@@ -87,3 +87,20 @@ fun TimeSlider(label: String, minutesVal: Float, onValueChange: (Float) -> Unit)
 fun ConfigLabel(text: String) {
     Text(text, color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, modifier = Modifier.padding(bottom = 10.dp))
 }
+
+// A small inline action chip, used for "+ ADD" / "REMOVE" controls in the
+// variable-length schedule editors (meals, medications, hygiene tasks).
+@Composable
+fun SmallActionButton(text: String, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier = modifier
+            .clip(CutCornerShape(topStart = 6.dp, bottomEnd = 6.dp))
+            .background(color.copy(alpha = 0.12f))
+            .border(1.dp, color.copy(alpha = 0.5f), CutCornerShape(topStart = 6.dp, bottomEnd = 6.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+    }
+}

@@ -19,6 +19,7 @@ class NotificationReplyReceiver : BroadcastReceiver() {
         val remoteInput = RemoteInput.getResultsFromIntent(intent)
         val replyText = remoteInput?.getCharSequence("KEY_TEXT_REPLY")?.toString() ?: "UNKNOWN VECTOR"
         val protocolId = intent.getIntExtra("PROTOCOL_ID", -1)
+        val itemKey = intent.getStringExtra("ITEM_KEY") ?: ""
 
         if (protocolId != -1) {
             val protocol = Protocol.values().firstOrNull { it.id == protocolId }
@@ -60,9 +61,10 @@ class NotificationReplyReceiver : BroadcastReceiver() {
                 if (stats != null && protocol != null) {
                     val newStats = when (protocol) {
                         Protocol.NUTRIENT -> stats.copy(nutrientCount = stats.nutrientCount + 1)
-                        Protocol.CHEMISTRY -> stats.copy(medsTaken = true)
                         Protocol.HYDRATION -> stats.copy(hydrationCount = stats.hydrationCount + 1)
-                        Protocol.MAINTENANCE -> stats.copy(hygieneDone = true)
+                        Protocol.CHEMISTRY, Protocol.MAINTENANCE -> if (itemKey.isNotEmpty()) {
+                            stats.copy(completedKeys = encodeKeySet(decodeKeySet(stats.completedKeys) + itemKey))
+                        } else stats
                     }
                     db.systemDao().setDailyStats(newStats)
 
@@ -70,8 +72,7 @@ class NotificationReplyReceiver : BroadcastReceiver() {
                     val putDataReq = PutDataMapRequest.create("/vitality_state_from_phone").apply {
                         dataMap.putInt("nutrients", newStats.nutrientCount)
                         dataMap.putInt("hydration", newStats.hydrationCount)
-                        dataMap.putBoolean("meds", newStats.medsTaken)
-                        dataMap.putBoolean("maint", newStats.hygieneDone)
+                        dataMap.putString("completedKeys", newStats.completedKeys)
                         dataMap.putLong("timestamp", now)
                     }.asPutDataRequest().setUrgent()
                     Wearable.getDataClient(context).putDataItem(putDataReq)
