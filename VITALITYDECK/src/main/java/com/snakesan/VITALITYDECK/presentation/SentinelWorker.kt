@@ -13,6 +13,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.Wearable
+import com.snakesan.vitalitysys.debug.DebugFlags
 import java.util.Calendar
 
 class SentinelWorker(val context: Context, workerParams: WorkerParameters) : CoroutineWorker(context, workerParams) {
@@ -55,9 +56,10 @@ class SentinelWorker(val context: Context, workerParams: WorkerParameters) : Cor
 
         // --- CHECK 2: STANDARD SENTINEL LOGIC ---
 
-        // DEBUG FLAG CHECK
+        // DEBUG FLAG CHECK — only acts if debug tools are switched on (see debug/DebugFlags.kt)
         val isDebug = inputData.getBoolean("IS_DEBUG", false)
         if (isDebug) {
+            if (!DebugFlags.isEnabled(context)) return Result.success()
             val protoId = inputData.getInt("DEBUG_PROTO", 2)
             val debugProto = Protocol.values().firstOrNull { it.id == protoId } ?: Protocol.HYDRATION
             triggerAlert(debugProto, "", "DEBUG: Artificial System Stress Test.")

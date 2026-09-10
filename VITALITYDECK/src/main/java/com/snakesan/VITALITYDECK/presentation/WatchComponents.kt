@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -26,10 +27,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.rotary.onRotaryScrollEvent
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Text
+import com.snakesan.vitalitysys.debug.DebugFlags
+import com.snakesan.vitalitysys.debug.forceRunSentinel
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import kotlin.math.abs
@@ -101,14 +105,6 @@ fun VitalityDeckUI(activity: MainActivity) {
     ) {
         // --- 1. SCANLINE EFFECT ---
         ScanlineOverlay(themeColor)
-
-        // --- 2. HEADER ---
-        Text(
-            text = if(isPainMode) "DIAGNOSTIC" else "PROT: ${Protocol.values()[activity.activeDeckIndex].label}",
-            color = themeColor,
-            fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp,
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp)
-        )
 
         // --- 3. MAIN CONTENT AREA ---
         Box(
@@ -185,6 +181,35 @@ fun VitalityDeckUI(activity: MainActivity) {
                 drawLine(themeColor, start = Offset(size.width/2, size.height), end = Offset(size.width, 0f), strokeWidth = 3f)
             }
         }
+
+        // --- 2. HEADER ---
+        // Drawn after the top/bottom navigation zones so its own long-press
+        // wins hit-testing over theirs within its small bounds, while the
+        // rest of the top strip still navigates as before.
+        // Long-press toggles debug mode (see debug/DebugFlags.kt) — off by
+        // default, so a normal long-press elsewhere (e.g. the log button)
+        // never accidentally fires a test alert.
+        val debugContext = LocalContext.current
+        Text(
+            text = if(isPainMode) "DIAGNOSTIC" else "PROT: ${Protocol.values()[activity.activeDeckIndex].label}",
+            color = themeColor,
+            fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 10.dp)
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = {
+                        val nowEnabled = DebugFlags.toggle(debugContext)
+                        vibrateAck(activity, heavy = true)
+                        Toast.makeText(
+                            debugContext,
+                            if (nowEnabled) "DEBUG MODE ON" else "DEBUG MODE OFF",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                )
+        )
 
         // --- 5. PAGINATION DOTS (Right Side) ---
         if (!isPainInputActive) {
