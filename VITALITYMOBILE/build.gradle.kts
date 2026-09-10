@@ -56,6 +56,9 @@ android {
     }
     buildFeatures {
         compose = true
+        // Needed for BuildConfig.DEBUG, which gates the ADMIN debug panel
+        // (see debug/DebugTools.kt) so it only exists in debug builds.
+        buildConfig = true
     }
 }
 

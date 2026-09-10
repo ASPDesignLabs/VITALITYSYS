@@ -23,9 +23,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
-import com.google.android.gms.wearable.Wearable
 import com.snakesan.vitalitysys.data.NotificationAudit
 import com.snakesan.vitalitysys.data.SystemLog
+import com.snakesan.vitalitysys.debug.DebugPanel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -349,7 +349,7 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
         Spacer(Modifier.weight(1f))
 
         ComplianceAuditModule(audits)
-        DataGovernanceModule(activity)
+        DebugPanel(activity)
 
         Spacer(Modifier.height(20.dp))
     }
@@ -514,90 +514,9 @@ fun DiagnosticModule(allLogs: List<SystemLog>, allAudits: List<NotificationAudit
     }
 }
 
-@Composable
-fun DataGovernanceModule(activity: MainActivity) {
-    var isRevealed by remember { mutableStateOf(false) }
-    var showDatePicker by remember { mutableStateOf(false) }
-
-    if (showDatePicker) {
-        DateRangePickerModal(
-            onDateSelected = { start, end ->
-                activity.rangeStart = start ?: activity.rangeStart
-                activity.rangeEnd = end ?: activity.rangeEnd
-                showDatePicker = false
-            },
-            onDismiss = { showDatePicker = false }
-        )
-    }
-
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 40.dp)) {
-        Box(
-            modifier = Modifier.fillMaxWidth().height(40.dp).clip(CutCornerShape(bottomEnd = 12.dp))
-                .background(if (isRevealed) NeonPink.copy(alpha = 0.2f) else Color.DarkGray.copy(alpha = 0.3f))
-                .clickable { isRevealed = !isRevealed },
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Text(if (isRevealed) "ADMIN // DATA_GOVERNANCE" else "ADMIN // SYSTEM_TOOLS", color = if (isRevealed) NeonPink else Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, modifier = Modifier.padding(start = 16.dp))
-        }
-
-        AnimatedVisibility(visible = isRevealed) {
-            Column(
-                modifier = Modifier.fillMaxWidth().background(Color(0xFF050A0A)).border(1.dp, NeonPink.copy(alpha=0.3f)).padding(16.dp)
-            ) {
-                Text("QUICK PURGE", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(10.dp))
-
-                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) {
-                    SmallActionButton("LAST 1H", Color.LightGray, Modifier.weight(1f)) { activity.deleteLastHour() }
-                    SmallActionButton("LAST 24H", Color.LightGray, Modifier.weight(1f)) { activity.deleteLast24Hours() }
-                }
-
-                Spacer(Modifier.height(20.dp))
-                Text("DEBUG TOOLS", color = NeonCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(10.dp))
-                CyberButtonBlock("INJECT 30-DAY FUZZY DATA (SEED: 1337)") {
-                    activity.injectFuzzyData()
-                }
-                Spacer(Modifier.height(10.dp))
-                CyberButtonBlock("INJECT OVERCHARGE (+25)") {
-                    if (activity.currentHP == 100f) {
-                        if (activity.overchargeStartTime == 0L) activity.overchargeStartTime = System.currentTimeMillis()
-                        activity.overchargeStartTime -= (30 * 60 * 1000L)
-                        activity.calculateHealth(Calendar.getInstance())
-
-                        Wearable.getNodeClient(activity).connectedNodes.addOnSuccessListener { nodes ->
-                            nodes.forEach { node ->
-                                Wearable.getMessageClient(activity).sendMessage(node.id, "/sys/debug_overcharge", ByteArray(0))
-                            }
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(20.dp))
-                Text("SURGICAL DELETION", color = NeonPink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(10.dp))
-
-                val rangeSdf = SimpleDateFormat("MM/dd/yyyy", Locale.US)
-                Row(
-                    Modifier.fillMaxWidth().clickable { showDatePicker = true }.border(1.dp, NeonPink, VitalityShape).padding(8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("TARGET:", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Text("${rangeSdf.format(Date(activity.rangeStart))} - ${rangeSdf.format(Date(activity.rangeEnd))}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                }
-
-                Spacer(Modifier.height(10.dp))
-                CyberButtonBlock("DELETE SELECTED RANGE") { activity.deleteCustomRange() }
-
-                Spacer(Modifier.height(20.dp))
-                Box(Modifier.fillMaxWidth().height(1.dp).background(Color.DarkGray))
-                Spacer(Modifier.height(20.dp))
-
-                CyberButtonBlock("FACTORY RESET (LOGS ONLY)", color = Color.Red) { activity.wipeAllData() }
-            }
-        }
-    }
-}
+// DataGovernanceModule (fuzzy-data injection, overcharge injection, quick
+// purge, surgical deletion, factory reset) moved to debug/DebugTools.kt's
+// DebugPanel, gated behind DebugFlags so it's off by default.
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -30,6 +30,9 @@ import com.google.android.gms.wearable.DataClient
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMapItem
+import com.snakesan.vitalitysys.debug.applyDebugOvercharge
+import com.snakesan.vitalitysys.debug.clearDebugBleed
+import com.snakesan.vitalitysys.debug.debugBleedDamage
 import kotlinx.coroutines.isActive
 
 class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListener, DataClient.OnDataChangedListener {
@@ -44,8 +47,6 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     var completedKeys by mutableStateOf<Set<String>>(emptySet())
     var config by mutableStateOf(SysConfig.DEFAULT)
     var syncState by mutableStateOf(SyncState.HIDDEN)
-
-    val activeDebugBleeds = mutableMapOf<Int, Long>()
 
     // Overcharge vals
     var overchargeStartTime = 0L
@@ -178,19 +179,16 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
 
     // --- UNIFIED BROADCAST PROTOCOL (UPDATED) ---
     // Replace the old broadcastToOverseerLocal() with this:
-    private fun broadcastToOverseerLocal() {
+    // internal (not private) so debug/DebugTools.kt's extension functions
+    // can force a rebroadcast after a debug-only state change.
+    internal fun broadcastToOverseerLocal() {
         val payload = VitalityMath.calculateSystemStatus(
             nutrientCount = nutrientCount, hydrationCount = hydrationCount,
             completedKeys = completedKeys, config = config
         )
 
-        // Calculate live DoT for any active debug triggers
-        var totalDebugDmg = 0
-        activeDebugBleeds.forEach { (_, startTime) ->
-            val elapsedMins = (System.currentTimeMillis() - startTime) / 60000
-            // Instantly hits for 25, then bleeds 1 HP every minute
-            totalDebugDmg += 25 + elapsedMins.toInt()
-        }
+        // Any HP hit from a manually-forced debug alert (see debug/DebugTools.kt)
+        val totalDebugDmg = debugBleedDamage()
 
         val finalHp = (payload.hp - totalDebugDmg).coerceIn(0, 100)
 
@@ -244,13 +242,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         }
         if (event.path == "/sys/debug_overcharge") {
             runOnUiThread {
-                // 1. Step the watch's internal clock backward by 30 minutes
-                if (overchargeStartTime == 0L) overchargeStartTime = System.currentTimeMillis()
-                overchargeStartTime -= (30 * 60 * 1000L)
-
-                // 2. Force the watch to instantly recalculate and broadcast the new Overcharge
-                // to OVERSEER without waiting for the 1-minute ticker
-                broadcastToOverseerLocal()
+                applyDebugOvercharge()
             }
         }
         if (event.path == "/sys/pull_animate") {
@@ -279,7 +271,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         val now = System.currentTimeMillis()
 
         // CLEAR DEBUG DAMAGE ON HEAL
-        activeDebugBleeds.remove(protocol.id)
+        clearDebugBleed(protocol.id)
 
         when(protocol) {
             Protocol.NUTRIENT -> { store.nutrientCount++; nutrientCount = store.nutrientCount }
@@ -299,19 +291,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         Wearable.getNodeClient(this).connectedNodes.addOnSuccessListener { nodes -> nodes.forEach { Wearable.getMessageClient(this).sendMessage(it.id, "/sys/telemetry", event.toBytes()) } }
     }
 
-    fun forceRunSentinel(debugProtocol: Protocol) {
-        vibrateAck(this, heavy = true)
-
-        // Start the bleed clock for this specific protocol
-        activeDebugBleeds[debugProtocol.id] = System.currentTimeMillis()
-
-        // Instantly calculate and broadcast the first tick
-        broadcastToOverseerLocal()
-
-        val data = Data.Builder().putBoolean("IS_DEBUG", true).putInt("DEBUG_PROTO", debugProtocol.id).build()
-        val workRequest = OneTimeWorkRequestBuilder<SentinelWorker>().setInputData(data).build()
-        WorkManager.getInstance(this).enqueue(workRequest)
-    }
+    // forceRunSentinel() moved to debug/DebugTools.kt, gated behind DebugFlags.
 
     fun logPain(level: Int) {
         vibrateAck(this, heavy = true)
