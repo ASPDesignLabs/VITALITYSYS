@@ -7,6 +7,14 @@
     <!-- REQUIRED for the "Interruption" overlay to wake screen -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- HEALTH CONNECT PERMISSIONS -->
+    <uses-permission android:name="android.permission.health.WRITE_HYDRATION" />
+    <uses-permission android:name="android.permission.health.WRITE_NUTRITION" />
+
+
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
 
     <application
         android:allowBackup="true"
@@ -14,6 +22,25 @@
         android:label="VITALITY.SYS"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
+
+        <!-- HEALTH CONNECT PRIVACY RATIONALE -->
+        <activity
+            android:name=".PrivacyRationaleActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.NoActionBar">
+
+            <!-- Android 13 and lower -->
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+
+            <!-- Android 14+ STRICT REQUIREMENT -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+
+        </activity>
 
         <activity
             android:name=".MainActivity"
@@ -25,5 +52,30 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/provider_paths" />
+        </provider>
+
+        <service
+            android:name=".VitalityListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <!-- This tells Android to ONLY wake the app up for this specific path -->
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/sys/alert_phone" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name=".NotificationReplyReceiver"
+            android:exported="false" />
+
     </application>
 </manifest>

@@ -1,8 +1,8 @@
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.compose.compiler)
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -19,6 +19,18 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // --- NEW SIGNING CONFIGURATION ---
+    signingConfigs {
+        create("shared_config") {
+            // This looks for 'debug.keystore' in the root folder of your project.
+            // Ensure you have copied the file there!
+            storeFile = file("${rootProject.projectDir}/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -26,8 +38,15 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Apply the shared key to release builds too for easier testing
+            signingConfig = signingConfigs.getByName("shared_config")
+        }
+        debug {
+            // Force debug builds to use the shared key
+            signingConfig = signingConfigs.getByName("shared_config")
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -44,8 +63,8 @@ dependencies {
 
     implementation("com.google.android.gms:play-services-wearable:18.1.0")
     implementation(libs.core.ktx)
-    implementation(libs.compose.foundation) // Provides core Wear Compose layout building blocks
-    implementation(libs.compose.material)   // Provides Wear-specific Material components like Theme, Text, etc.
+    implementation(libs.compose.foundation)
+    implementation(libs.compose.material)
     implementation(libs.wear.tooling.preview)
     implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.activity.compose)
@@ -54,6 +73,7 @@ dependencies {
     implementation(libs.ui.graphics)
     implementation(libs.ui.tooling.preview)
     implementation(libs.material3)
+    implementation(libs.work.runtime.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
@@ -65,8 +85,15 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.9.0")
-    implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material3:material3:1.2.1")
     implementation("androidx.appcompat:appcompat:1.6.1")
 
-}
+    // ROOM DATABASE DEPENDENCIES
+    val room_version = "2.6.1"
+    implementation("androidx.room:room-runtime:$room_version")
+    implementation("androidx.room:room-ktx:$room_version")
+
+    ksp("androidx.room:room-compiler:$room_version")
+
+    // Health Connect
+    implementation("androidx.health.connect:connect-client:1.1.0-alpha07")}

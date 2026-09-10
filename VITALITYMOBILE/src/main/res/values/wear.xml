@@ -1,0 +1,5 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string-array name="android_wear_capabilities">
+        <item>vitality_client</item>
+    </string-array>
+</resources>

@@ -9,152 +9,329 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.view.WindowManager
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CutCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.RemoteInput
 import androidx.core.view.WindowCompat
-import com.google.android.gms.wearable.MessageClient
-import com.google.android.gms.wearable.MessageEvent
-import com.google.android.gms.wearable.Wearable
+import androidx.lifecycle.lifecycleScope
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import com.google.android.gms.wearable.*
+import com.snakesan.vitalitysys.data.DailyStats
+import com.snakesan.vitalitysys.data.NotificationAudit
+import com.snakesan.vitalitysys.data.SystemLog
+import com.snakesan.vitalitysys.data.VitalityDatabase
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
+import java.util.Calendar
+import java.util.concurrent.TimeUnit
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.isActive
 
-// --- DATA LAYER ---
-enum class Protocol(val id: Int, val label: String, val colorHex: Long) {
-    NUTRIENT(0, "NUTRIENT", 0xFF00F3FF),      // Neon Cyan
-    CHEMISTRY(1, "CHEMISTRY", 0xFFFF0055),    // Neon Pink
-    HYDRATION(2, "HYDRATION", 0xFF00FF41),    // Bio Green
-    MAINTENANCE(3, "MAINTENANCE", 0xFFFF9900) // Data Amber
-}
-
-data class TelemetryEvent(val protocolId: Int, val timestamp: Long) {
-    companion object {
-        fun fromBytes(bytes: ByteArray): TelemetryEvent {
-            val buffer = ByteBuffer.wrap(bytes)
-            return TelemetryEvent(buffer.int, buffer.long)
-        }
-    }
-}
-
-data class SysConfig(
-    val meal1Time: Int, val meal2Time: Int, val meal3Time: Int,
-    val medsWeekday: Int, val medsWeekend: Int,
-    val hydrationTargetMl: Int, val activeStartHour: Int, val activeEndHour: Int,
-    val maint1Time: Int, val maint2Time: Int
-) {
-    fun toBytes(): ByteArray {
-        val buffer = ByteBuffer.allocate(40)
-        buffer.putInt(meal1Time); buffer.putInt(meal2Time); buffer.putInt(meal3Time)
-        buffer.putInt(medsWeekday); buffer.putInt(medsWeekend)
-        buffer.putInt(hydrationTargetMl); buffer.putInt(activeStartHour); buffer.putInt(activeEndHour)
-        buffer.putInt(maint1Time); buffer.putInt(maint2Time)
-        return buffer.array()
-    }
-}
-
-// --- STATE MACHINE ---
-enum class AppMode { DASHBOARD, INTERRUPT_CAPTURE, INTERRUPT_ACTION, INTERRUPT_RESTORE }
-enum class UploadState { IDLE, UPLOADING, SUCCESS }
-
-// --- THEME ---
-val NeonCyan = Color(0xFF00F3FF)
-val NeonPink = Color(0xFFFF0055)
-val NeonGreen = Color(0xFF00FF41)
-val NeonBg = Color(0xFF050505)
-val NeonDark = Color(0xFF121212)
-
-class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListener {
-
-    // Telemetry State
+class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListener, DataClient.OnDataChangedListener {
+    // --- STATE ---
     var nutrientCount by mutableIntStateOf(0)
     var hydrationCount by mutableIntStateOf(0)
     var medsTaken by mutableStateOf(false)
     var hygieneDone by mutableStateOf(false)
-    
-    // Configuration State
+
+    var currentHP by mutableFloatStateOf(100f)
+
+    private val activeDebugBleeds = mutableStateMapOf<Int, Long>()
+    var pendingPainLevel by mutableIntStateOf(0)
+
+    var rangeStart by mutableLongStateOf(System.currentTimeMillis() - 604800000L)
+    var rangeEnd by mutableLongStateOf(System.currentTimeMillis())
+
     var meal1 by mutableFloatStateOf(540f)
     var meal2 by mutableFloatStateOf(780f)
     var meal3 by mutableFloatStateOf(1140f)
     var medsWkday by mutableFloatStateOf(480f)
     var medsWkend by mutableFloatStateOf(600f)
     var hydrationTarget by mutableFloatStateOf(3250f)
-    var activeStart by mutableFloatStateOf(8f) 
+    var activeStart by mutableFloatStateOf(8f)
     var activeEnd by mutableFloatStateOf(22f)
 
-    // UI State
+    var clinicalOverride by mutableStateOf(false)
+
     var uploadState by mutableStateOf(UploadState.IDLE)
     var appMode by mutableStateOf(AppMode.DASHBOARD)
-    var activeProtocol by mutableStateOf<Protocol?>(null) // Which protocol triggered the alert
-    var userContext by mutableStateOf("") // "What was I doing?"
+    var activeProtocol by mutableStateOf<Protocol?>(null)
+    var userContext by mutableStateOf("")
 
-    // Permission Launcher
+    // Overcharge variables
+    var overchargeStartTime by mutableLongStateOf(0L)
+    var currentOvercharge by mutableIntStateOf(0)
+
+    lateinit var db: VitalityDatabase
+
+    val healthConnectManager by lazy { HealthConnectManager(this) }
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { isGranted: Boolean ->
-        // Permission logic handled
+    ) { }
+
+    private fun getTodayId(): Int {
+        val c = Calendar.getInstance()
+        return (c.get(Calendar.YEAR) * 1000) + c.get(Calendar.DAY_OF_YEAR)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Request permissions on launch if we don't have them
+        val healthPermissionLauncher = registerForActivityResult(
+                   androidx.health.connect.client.PermissionController.createRequestPermissionResultContract()
+               ) { granted ->
+                   if (granted.containsAll(healthConnectManager.requiredPermissions)) {
+                           Log.d("VITALITY.SYS", "Health Connect link optimized.")
+                       }
+               }
+
+        lifecycleScope.launch {
+                   if (!healthConnectManager.hasAllPermissions()) {
+                       healthPermissionLauncher.launch(healthConnectManager.requiredPermissions)
+                       }
+               }
+
         WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        val prefs = getSharedPreferences("vitality_config", Context.MODE_PRIVATE)
+        meal1 = prefs.getFloat("meal1", 540f)
+        meal2 = prefs.getFloat("meal2", 780f)
+        meal3 = prefs.getFloat("meal3", 1140f)
+        medsWkday = prefs.getFloat("medsWkday", 480f)
+        medsWkend = prefs.getFloat("medsWkend", 600f)
+        hydrationTarget = prefs.getFloat("hydrationTarget", 3250f)
+        activeStart = prefs.getFloat("activeStart", 8f)
+        activeEnd = prefs.getFloat("activeEnd", 22f)
+
+        db = VitalityDatabase.getDatabase(this)
+
+        // --- LOAD STATE FROM DB ---
+        lifecycleScope.launch {
+            val stats = withContext(Dispatchers.IO) {
+                db.systemDao().getDailyStats(getTodayId())
+            }
+            if (stats != null) {
+                nutrientCount = stats.nutrientCount
+                hydrationCount = stats.hydrationCount
+                medsTaken = stats.medsTaken
+                hygieneDone = stats.hygieneDone
+                calculateHealth(Calendar.getInstance())
+            }
+        }
+
+        // --- SCHEDULE BACKGROUND WORKER (FITBIT STYLE) ---
+        val heartbeatRequest = PeriodicWorkRequestBuilder<HeartbeatWorker>(15, TimeUnit.MINUTES)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "VitalityHeartbeat",
+            ExistingPeriodicWorkPolicy.KEEP,
+            heartbeatRequest
+        )
+
         Wearable.getMessageClient(this).addListener(this)
-        
-        createNotificationChannel()
-        
-        // CHECK INTENT: Did we open via Notification?
+        Wearable.getDataClient(this).addListener(this)
         handleIntent(intent)
 
-        // ASK FOR PERMISSION ON LAUNCH
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
                 requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        lifecycleScope.launch {
+            // repeatOnLifecycle suspends when the app is minimized and resumes when opened
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (isActive) {
+                    calculateHealth(Calendar.getInstance())
+                    // 5-second tick for incredibly responsive UI without draining background battery
+                    delay(5000)
+                }
             }
         }
 
         setContent { NeonTheme { VitalityOrchestrator(this) } }
     }
-    
+
+    fun saveAndPushConfig() {
+        // Save locally for the HeartbeatWorker and next app launch
+        val prefs = getSharedPreferences("vitality_config", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putFloat("meal1", meal1).putFloat("meal2", meal2).putFloat("meal3", meal3)
+            .putFloat("medsWkday", medsWkday).putFloat("medsWkend", medsWkend)
+            .putFloat("hydrationTarget", hydrationTarget)
+            .putFloat("activeStart", activeStart).putFloat("activeEnd", activeEnd)
+            .apply()
+
+        // Push to Watch
+        val putDataReq = PutDataMapRequest.create("/vitality_config").apply {
+            dataMap.putFloat("meal1", meal1)
+            dataMap.putFloat("meal2", meal2)
+            dataMap.putFloat("meal3", meal3)
+            dataMap.putFloat("medsWkday", medsWkday)
+            dataMap.putFloat("medsWkend", medsWkend)
+            dataMap.putFloat("hydrationTarget", hydrationTarget)
+            dataMap.putFloat("activeStart", activeStart)
+            dataMap.putFloat("activeEnd", activeEnd)
+            dataMap.putLong("ts", System.currentTimeMillis())
+        }.asPutDataRequest()
+
+        putDataReq.setUrgent()
+        Wearable.getDataClient(this).putDataItem(putDataReq)
+    }
+
+    private fun persistState() {
+        val dayId = getTodayId()
+        val stats = DailyStats(
+            dayId = dayId,
+            nutrientCount = nutrientCount,
+            hydrationCount = hydrationCount,
+            medsTaken = medsTaken,
+            hygieneDone = hygieneDone,
+            lastUpdated = System.currentTimeMillis()
+        )
+        lifecycleScope.launch(Dispatchers.IO) {
+            db.systemDao().setDailyStats(stats)
+        }
+    }
+
+    // --- DAMAGE LOGIC ENGINE ---
+    fun calculateHealth(now: Calendar) {
+        // 1. Build the config from the phone's live state variables
+        val currentConfig = SysConfig(
+            meal1Time = meal1, meal2Time = meal2, meal3Time = meal3,
+            medsWeekday = medsWkday, medsWeekend = medsWkend,
+            hydrationTargetMl = hydrationTarget,
+            activeStartHour = activeStart, activeEndHour = activeEnd,
+            maint1Time = 450f, maint2Time = 1320f,
+            clinicalOverride = if (clinicalOverride) 1f else 0f
+        )
+
+        // 2. Feed it to the unified Math Engine
+        val payload = VitalityMath.calculateSystemStatus(
+            nutrientCount = nutrientCount,
+            hydrationCount = hydrationCount,
+            medsTaken = medsTaken,
+            maintDone = hygieneDone,
+            config = currentConfig
+        )
+
+        // 3. Apply arbitrary debug penalties (from notifications/testing)
+        var totalDebugDmg = 0
+        activeDebugBleeds.forEach { (_, startTime) ->
+            val elapsedMins = (System.currentTimeMillis() - startTime) / 60000
+            totalDebugDmg += 25 + elapsedMins.toInt()
+        }
+
+        val finalHp = (payload.hp - totalDebugDmg).coerceIn(0, 100)
+        currentHP = finalHp.toFloat()
+
+        // --- NEW OVERCHARGE LOGIC ---
+        if (finalHp == 100) {
+            if (overchargeStartTime == 0L) {
+                overchargeStartTime = System.currentTimeMillis()
+            }
+            val elapsedMins = (System.currentTimeMillis() - overchargeStartTime) / 60000
+            // 60 minutes = 50 points. Coerce to a max of 50.
+            currentOvercharge = ((elapsedMins * 50) / 60).toInt().coerceIn(0, 50)
+        } else {
+            // Glass Cannon: Instantly shatter momentum
+            overchargeStartTime = 0L
+            currentOvercharge = 0
+        }
+
+        broadcastHpToOverseer(currentHP)
+    }
+
+    // --- BROADCAST TO WATCH FACE ---
+    private fun broadcastHpToOverseer(hpValue: Float) {
+        val finalHp = hpValue.toInt().coerceIn(0, 100)
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                // Need the full payload from the last calculation to keep Watch informed
+                val payload = VitalityMath.calculateSystemStatus(
+                    nutrientCount, hydrationCount, medsTaken, hygieneDone,
+                    SysConfig(meal1, meal2, meal3, medsWkday, medsWkend, hydrationTarget, activeStart, activeEnd, 450f, 1320f, if(clinicalOverride) 1f else 0f)
+                )
+
+                val dataMapRequest = PutDataMapRequest.create("/vitality_status").apply {
+                    dataMap.putInt("user_hp", finalHp)
+                    dataMap.putInt("hyd_status", payload.hydStatus)
+                    dataMap.putInt("meal_status", payload.mealStatus)
+                    dataMap.putInt("overcharge", currentOvercharge) // <-- Send Overcharge!
+                    dataMap.putLong("ts", System.currentTimeMillis())
+                }
+
+                val request = dataMapRequest.asPutDataRequest().setUrgent()
+                com.google.android.gms.tasks.Tasks.await(
+                    Wearable.getDataClient(this@MainActivity).putDataItem(request)
+                )
+            } catch (e: Exception) {
+                Log.e("VITALITY_LINK", "!!! FAILED", e)
+            }
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
     }
-    
+
+    override fun onDataChanged(dataEvents: DataEventBuffer) {
+        dataEvents.forEach { event ->
+            if (event.type == DataEvent.TYPE_CHANGED) {
+                if (event.dataItem.uri.path == "/vitality_state") {
+                    val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
+                    runOnUiThread {
+                        nutrientCount = dataMap.getInt("nutrients", nutrientCount)
+                        hydrationCount = dataMap.getInt("hydration", hydrationCount)
+                        medsTaken = dataMap.getBoolean("meds", medsTaken)
+                        hygieneDone = dataMap.getBoolean("maint", hygieneDone)
+
+                        calculateHealth(Calendar.getInstance())
+                        persistState()
+                    }
+                }
+            }
+        }
+    }
+
     private fun handleIntent(intent: Intent) {
         if (intent.hasExtra("PROTOCOL_ID")) {
             val protoId = intent.getIntExtra("PROTOCOL_ID", -1)
-            if (protoId != -1) {
-                activeProtocol = Protocol.values().firstOrNull { it.id == protoId }
+            if (protoId == 99) {
+                val level = intent.getIntExtra("PAIN_LEVEL", 0)
+                pendingPainLevel = level
+                appMode = AppMode.INTERRUPT_CAPTURE
+                userContext = ""
+                activeProtocol = Protocol.CHEMISTRY
+            } else if (protoId != -1) {
+                activeProtocol = Protocol.values().find { it.id == protoId }
                 if (activeProtocol != null) {
-                    appMode = AppMode.INTERRUPT_CAPTURE // Start the Trap
+                    if (activeProtocol == Protocol.NUTRIENT) {
+                        appMode = AppMode.NUTRITION_CAPTURE
+                    } else {
+                        appMode = AppMode.INTERRUPT_CAPTURE
+                    }
                 }
             }
         }
@@ -163,374 +340,268 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     override fun onDestroy() {
         super.onDestroy()
         Wearable.getMessageClient(this).removeListener(this)
+        Wearable.getDataClient(this).removeListener(this)
     }
 
     override fun onMessageReceived(event: MessageEvent) {
-        // 1. Telemetry Sync
+        if (event.path == "/sys/pain_log") {
+            val buffer = ByteBuffer.wrap(event.data)
+            val painLevel = buffer.int
+            val intent = Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                putExtra("PROTOCOL_ID", 99)
+                putExtra("PAIN_LEVEL", painLevel)
+            }
+            startActivity(intent)
+        }
+
         if (event.path == "/sys/telemetry") {
             val telemetry = TelemetryEvent.fromBytes(event.data)
-            when(telemetry.protocolId) {
-                0 -> nutrientCount++
+
+            activeDebugBleeds.remove(telemetry.protocolId)
+
+            // NEW: Intercept Nutrient (Meal) telemetry and force the phone to wake up!
+            if (telemetry.protocolId == Protocol.NUTRIENT.id) {
+                val intent = Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                    putExtra("PROTOCOL_ID", Protocol.NUTRIENT.id)
+                }
+                startActivity(intent)
+                return
+            }
+
+            // Otherwise, standard background processing
+            when (telemetry.protocolId) {
+                0 -> nutrientCount++ // Failsafe, though intercepted above
                 1 -> medsTaken = true
-                2 -> hydrationCount++
+                2 -> {
+                    hydrationCount++
+                    // Forward the watch log directly to Health Connect!
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        healthConnectManager.logWater(250.0)
+                    }
+                }
                 3 -> hygieneDone = !hygieneDone
             }
+            calculateHealth(Calendar.getInstance())
+            persistState()
         }
-        
-        // 2. REMOTE TRIGGER from Watch
+
         if (event.path == "/sys/alert_phone") {
             val protoId = ByteBuffer.wrap(event.data).int
             val protocol = Protocol.values().firstOrNull { it.id == protoId }
             if (protocol != null) {
-                triggerNotification(protocol)
-            }
-        }
-    }
-    
-    fun sendConfig() {
-        val config = SysConfig(
-            meal1Time = meal1.toInt(), meal2Time = meal2.toInt(), meal3Time = meal3.toInt(),
-            medsWeekday = medsWkday.toInt(), medsWeekend = medsWkend.toInt(),
-            hydrationTargetMl = hydrationTarget.toInt(), 
-            activeStartHour = activeStart.toInt(), activeEndHour = activeEnd.toInt(),
-            maint1Time = 450, maint2Time = 1320
-        )
-        Wearable.getNodeClient(this).connectedNodes.addOnSuccessListener { nodes ->
-            nodes.forEach { Wearable.getMessageClient(this).sendMessage(it.id, "/sys/config", config.toBytes()) }
-        }
-    }
-    
-    private fun triggerNotification(protocol: Protocol) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && 
-            ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
-
-        val intent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            putExtra("PROTOCOL_ID", protocol.id)
-        }
-        
-        // FLAG_IMMUTABLE is required for Android 12+
-        val pendingIntent = PendingIntent.getActivity(this, protocol.id, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-
-        val builder = NotificationCompat.Builder(this, "vitality_urgent")
-            .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setContentTitle("PROTOCOL: ${protocol.label}")
-            .setContentText("CRITICAL MAINTENANCE REQUIRED. TAP TO ENGAGE.")
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setColor(0xFF00F3FF.toInt())
-            .setFullScreenIntent(pendingIntent, true)
-            .setAutoCancel(true)
-
-        try {
-            NotificationManagerCompat.from(this).notify(protocol.id, builder.build())
-        } catch (e: SecurityException) {
-            // Permission missing
-        }
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel("vitality_urgent", "Vitality Protocols", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Interrupts for bio-maintenance"
-                enableVibration(true)
-            }
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-        }
-    }
-
-    @Composable
-    fun NeonTheme(content: @Composable () -> Unit) {
-        MaterialTheme(
-            colorScheme = darkColorScheme(
-                primary = NeonCyan, secondary = NeonPink, background = NeonBg, surface = NeonDark
-            ), content = content
-        )
-    }
-}
-
-// --- UI ORCHESTRATOR ---
-@Composable
-fun VitalityOrchestrator(activity: MainActivity) {
-    Box(Modifier.fillMaxSize().background(NeonBg)) {
-        // 1. Standard Dashboard
-        VitalityDashboard(activity)
-
-        // 2. Interruption Overlay (Hijacks screen)
-        if (activity.appMode != AppMode.DASHBOARD && activity.activeProtocol != null) {
-            InterruptionOverlay(activity)
-        }
-    }
-}
-
-@Composable
-fun InterruptionOverlay(activity: MainActivity) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(NeonBg.copy(alpha = 0.98f)) // Near opaque
-            .clickable(enabled = false) {}
-            .padding(20.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            
-            // STAGE 1: CAPTURE
-            if (activity.appMode == AppMode.INTERRUPT_CAPTURE) {
-                Text("INTERRUPT DETECTED", color = NeonPink, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                Spacer(Modifier.height(20.dp))
-                Text("STATE CURRENT VECTOR", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
-                Text("( What were you doing? )", color = Color.Gray, fontSize = 12.sp)
-                
-                Spacer(Modifier.height(30.dp))
-                
-                var text by remember { mutableStateOf("") }
-                BasicTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    textStyle = TextStyle(color = NeonCyan, fontSize = 22.sp, fontWeight = FontWeight.Bold),
-                    cursorBrush = SolidColor(NeonCyan),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, NeonCyan, CutCornerShape(8.dp))
-                        .padding(20.dp)
-                )
-                
-                Spacer(Modifier.height(30.dp))
-                
-                CyberButtonBlock("LOCK VECTOR") {
-                    activity.userContext = text.ifEmpty { "UNKNOWN TASK" }
-                    activity.appMode = AppMode.INTERRUPT_ACTION
+                runOnUiThread {
+                    activeDebugBleeds[protoId] = System.currentTimeMillis()
+                    calculateHealth(Calendar.getInstance())
                 }
             }
+        }
+    }
 
-            // STAGE 2: ACTION
-            if (activity.appMode == AppMode.INTERRUPT_ACTION) {
-                val protocol = activity.activeProtocol!!
-                val color = Color(protocol.colorHex)
-                
-                Text("VECTOR LOCKED", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Text(activity.userContext.uppercase(), color = Color.White, fontSize = 14.sp)
-                
-                Spacer(Modifier.height(60.dp))
-                
-                Text("EXECUTE PROTOCOL", color = color, fontSize = 12.sp, letterSpacing = 2.sp)
-                Text(protocol.label, color = color, fontSize = 40.sp, fontWeight = FontWeight.Black)
-                
-                Spacer(Modifier.height(60.dp))
-                
-                CyberButtonBlock("CONFIRM COMPLETION") {
-                    // Update state locally
-                    when(protocol) {
-                        Protocol.NUTRIENT -> activity.nutrientCount++
-                        Protocol.CHEMISTRY -> activity.medsTaken = true
-                        Protocol.HYDRATION -> activity.hydrationCount++
-                        Protocol.MAINTENANCE -> activity.hygieneDone = true
+    // --- NEW: AUDIT FULFILLMENT ---
+    fun fulfillProtocolAudit(protocolId: Int) {
+        val now = System.currentTimeMillis()
+        lifecycleScope.launch(Dispatchers.IO) {
+            val audit = db.systemDao().getAuditByNotificationId(protocolId)
+            if (audit != null) {
+                // Time delta in seconds
+                val timeDelta = (now - audit.timestampIssued) / 1000
+                val finalStat = if (timeDelta > 3600) "CRITICAL_DELAY" else "SUCCESS"
+
+                db.systemDao().updateAudit(
+                    audit.copy(
+                        timestampInteracted = audit.timestampInteracted ?: now,
+                        timestampFulfilled = now,
+                        interactionType = audit.interactionType ?: "CLICKED",
+                        finalStatus = finalStat
+                    )
+                )
+            }
+        }
+    }
+
+    // Now these functions are safely back in the main class:
+
+    fun commitPainLog(note: String) {
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                db.systemDao().insertLog(
+                    SystemLog(
+                        timestamp = System.currentTimeMillis(),
+                        type = "PAIN",
+                        value = pendingPainLevel,
+                        note = note
+                    )
+                )
+            }
+            pendingPainLevel = 0
+            appMode = AppMode.DASHBOARD
+            activeProtocol = null
+        }
+    }
+
+    fun deleteLastHour() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            db.systemDao().deleteLogsSince(System.currentTimeMillis() - 3600000L)
+        }
+    }
+
+    fun deleteLast24Hours() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            db.systemDao().deleteLogsSince(System.currentTimeMillis() - 86400000L)
+        }
+    }
+
+    fun deleteCustomRange() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            db.systemDao().deleteLogsInWindow(rangeStart, rangeEnd)
+        }
+    }
+
+    fun wipeAllData() {
+        lifecycleScope.launch(Dispatchers.IO) { db.systemDao().nukeAllLogs() }
+    }
+    // --- FUZZY DATA INJECTION TOOL ---
+    fun injectFuzzyData(seed: Long = 1337L) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            // 1. Wipe existing slate clean
+            db.clearAllTables()
+
+            val random = java.util.Random(seed)
+            val now = System.currentTimeMillis()
+            val dayMs = 86400000L
+            var notifIdCounter = 1000
+
+            // 2. Loop backwards through 30 days
+            for (i in 30 downTo 0) {
+                val dayStart = now - (i * dayMs)
+                val cal = Calendar.getInstance().apply { timeInMillis = dayStart }
+                val dayId = (cal.get(Calendar.YEAR) * 1000) + cal.get(Calendar.DAY_OF_YEAR)
+
+                var nutCount = 0
+                var hydCount = 0
+                var medTaken = false
+                var hygiene = false
+
+                // Inner helper to simulate a notification lifecycle
+                suspend fun generateEvent(protocol: String, hour: Int, minute: Int) {
+                    val issueTime = dayStart + (hour * 3600000L) + (minute * 60000L)
+                    val r = random.nextDouble()
+
+                    // ARTIFICIAL RESISTANCE: 85% chance to ignore/fail if it happens between 14:00 and 15:00
+                    val isResistanceHour = hour == 14
+                    val behavior = if (isResistanceHour && r < 0.85) {
+                        if (random.nextBoolean()) "IGNORED" else "DISMISSED"
+                    } else {
+                        // Normal Distribution
+                        when {
+                            r < 0.45 -> "FAST"       // < 5 mins
+                            r < 0.70 -> "DELAY"      // 5-15 mins
+                            r < 0.85 -> "WARNING"    // 15-60 mins
+                            r < 0.95 -> "IGNORED"    // No answer
+                            else -> "DISMISSED"      // Swiped away
+                        }
                     }
-                    activity.appMode = AppMode.INTERRUPT_RESTORE
-                }
-            }
 
-            // STAGE 3: RESTORE
-            if (activity.appMode == AppMode.INTERRUPT_RESTORE) {
-                Text("SYSTEM OPTIMIZED", color = NeonGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                
-                Spacer(Modifier.height(40.dp))
-                
-                Text("RESUMING VECTOR:", color = Color.Gray, fontSize = 12.sp)
-                Text(activity.userContext.uppercase(), color = NeonCyan, fontSize = 28.sp, fontWeight = FontWeight.Black)
-                
-                Spacer(Modifier.height(60.dp))
-                
-                CyberButtonBlock("ENGAGE") {
-                    activity.appMode = AppMode.DASHBOARD
-                    activity.activeProtocol = null
-                    activity.userContext = ""
-                }
-            }
-        }
-    }
-}
+                    var interactTime: Long? = null
+                    var fulfillTime: Long? = null
+                    var type: String? = null
+                    var status: String? = null
 
-@Composable
-fun VitalityDashboard(activity: MainActivity) {
-    val scrollState = rememberScrollState()
-    val scope = rememberCoroutineScope()
+                    when (behavior) {
+                        "FAST" -> {
+                            interactTime = issueTime + (random.nextInt(4) * 60000L)
+                            fulfillTime = interactTime + 10000L
+                            type = "CLICKED"
+                            status = "SUCCESS"
+                        }
+                        "DELAY" -> {
+                            interactTime = issueTime + ((5 + random.nextInt(10)) * 60000L)
+                            fulfillTime = interactTime + 10000L
+                            type = "CLICKED"
+                            status = "SUCCESS"
+                        }
+                        "WARNING" -> {
+                            interactTime = issueTime + ((16 + random.nextInt(40)) * 60000L)
+                            fulfillTime = interactTime + 10000L
+                            type = "CLICKED"
+                            status = "CRITICAL_DELAY"
+                        }
+                        "IGNORED" -> {
+                            type = "IGNORED"
+                            status = "ABANDONED"
+                        }
+                        "DISMISSED" -> {
+                            interactTime = issueTime + (random.nextInt(2) * 60000L)
+                            type = "DISMISSED"
+                            status = "ABANDONED"
+                        }
+                    }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(NeonBg)
-            .systemBarsPadding()
-            .verticalScroll(scrollState)
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(Modifier.height(20.dp))
-        Text("VITALITY.SYS", color = NeonCyan, fontSize = 32.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
-        Text("CLINICAL CONTROLLER", color = Color.Gray, fontSize = 12.sp, letterSpacing = 2.sp)
-        
-        Spacer(Modifier.height(30.dp))
+                    // Save Audit
+                    db.systemDao().insertAudit(
+                        com.snakesan.vitalitysys.data.NotificationAudit(
+                            notificationId = notifIdCounter++,
+                            protocolType = protocol,
+                            timestampIssued = issueTime,
+                            timestampInteracted = interactTime,
+                            timestampFulfilled = fulfillTime,
+                            interactionType = type,
+                            finalStatus = status
+                        )
+                    )
 
-        // --- CARDS ---
-        ProtocolCard(
-            protocol = Protocol.NUTRIENT,
-            current = activity.nutrientCount, target = 3, unit = "MEALS",
-            content = {
-                ConfigLabel("INTAKE SCHEDULE")
-                TimeSlider("MEAL 1", activity.meal1) { activity.meal1 = it }
-                TimeSlider("MEAL 2", activity.meal2) { activity.meal2 = it }
-                TimeSlider("MEAL 3", activity.meal3) { activity.meal3 = it }
-            }
-        )
-
-        ProtocolCard(
-            protocol = Protocol.CHEMISTRY,
-            current = if(activity.medsTaken) 1 else 0, target = 1, unit = if(activity.medsTaken) "COMPLIANT" else "PENDING",
-            content = {
-                ConfigLabel("DOSAGE TIMING")
-                TimeSlider("WEEKDAY", activity.medsWkday) { activity.medsWkday = it }
-                TimeSlider("WEEKEND", activity.medsWkend) { activity.medsWkend = it }
-            }
-        )
-
-        ProtocolCard(
-            protocol = Protocol.HYDRATION,
-            current = activity.hydrationCount, target = (activity.hydrationTarget / 250).toInt(), unit = "DOSES",
-            content = {
-                ConfigLabel("VOLUME & CYCLE")
-                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                    Text("TARGET: ${activity.hydrationTarget.toInt()}mL", color = Color(Protocol.HYDRATION.colorHex), fontSize = 12.sp)
-                }
-                Slider(
-                    value = activity.hydrationTarget, onValueChange = { activity.hydrationTarget = it },
-                    valueRange = 1000f..4000f, steps = 10,
-                    colors = SliderDefaults.colors(thumbColor = Color(Protocol.HYDRATION.colorHex), activeTrackColor = Color(Protocol.HYDRATION.colorHex))
-                )
-                Text("ACTIVE: ${activity.activeStart.toInt()}:00 - ${activity.activeEnd.toInt()}:00", color = Color.Gray, fontSize = 10.sp)
-                RangeSlider(
-                    value = activity.activeStart..activity.activeEnd,
-                    onValueChange = { activity.activeStart = it.start; activity.activeEnd = it.endInclusive },
-                    valueRange = 0f..24f,
-                    colors = SliderDefaults.colors(thumbColor = Color(Protocol.HYDRATION.colorHex), activeTrackColor = Color(Protocol.HYDRATION.colorHex))
-                )
-            }
-        )
-
-        ProtocolCard(
-            protocol = Protocol.MAINTENANCE,
-            current = if(activity.hygieneDone) 1 else 0, target = 1, unit = if(activity.hygieneDone) "OPTIMAL" else "DEGRADED",
-            content = { Text("HARDCODED: 07:30 // 22:00", color = Color.Gray, fontSize = 10.sp) }
-        )
-        
-        Spacer(Modifier.height(30.dp))
-        
-        // --- SMART SYNC BUTTON ---
-        SmartSyncButton(
-            state = activity.uploadState,
-            onClick = {
-                if (activity.uploadState == UploadState.IDLE) {
-                    activity.sendConfig()
-                    scope.launch {
-                        activity.uploadState = UploadState.UPLOADING
-                        delay(2500) 
-                        activity.uploadState = UploadState.SUCCESS
-                        delay(1000) 
-                        activity.uploadState = UploadState.IDLE
+                    // Save matching Log and update Counters if successful
+                    if (status == "SUCCESS" || status == "CRITICAL_DELAY") {
+                        db.systemDao().insertLog(
+                            com.snakesan.vitalitysys.data.SystemLog(
+                                timestamp = fulfillTime ?: issueTime,
+                                type = protocol, value = 1, note = "Auto-Fuzz"
+                            )
+                        )
+                        when (protocol) {
+                            "NUTRIENT" -> nutCount++
+                            "HYDRATION" -> hydCount++
+                            "CHEMISTRY" -> medTaken = true
+                            "MAINTENANCE" -> hygiene = true
+                        }
                     }
                 }
+
+                // Build a standard day
+                generateEvent("CHEMISTRY", 8, 30)
+                generateEvent("NUTRIENT", 9, 0)
+                generateEvent("HYDRATION", 10, 0)
+                generateEvent("HYDRATION", 12, 0)
+                generateEvent("NUTRIENT", 14, 0) // <-- The targeted Resistance Block
+                generateEvent("HYDRATION", 16, 0)
+                generateEvent("NUTRIENT", 19, 0)
+                generateEvent("MAINTENANCE", 22, 0)
+
+                // Inject 1 or 2 Random Pain Logs
+                if (random.nextDouble() > 0.5) {
+                    val painLvl = 2 + random.nextInt(6)
+                    db.systemDao().insertLog(
+                        com.snakesan.vitalitysys.data.SystemLog(
+                            timestamp = dayStart + (random.nextInt(12) + 8) * 3600000L,
+                            type = "PAIN", value = painLvl, note = "Synthetic Pain Event"
+                        )
+                    )
+                }
+
+                // Finalize Daily Stats
+                db.systemDao().setDailyStats(
+                    com.snakesan.vitalitysys.data.DailyStats(
+                        dayId = dayId, nutrientCount = nutCount, hydrationCount = hydCount, medsTaken = medTaken, hygieneDone = hygiene
+                    )
+                )
             }
-        )
-        Spacer(Modifier.height(20.dp))
-    }
-}
 
-// --- SHARED UI ---
-@Composable
-fun CyberButtonBlock(text: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxWidth().height(50.dp).clip(CutCornerShape(8.dp))
-            .background(NeonCyan.copy(alpha = 0.1f)).border(1.dp, NeonCyan.copy(alpha = 0.5f), CutCornerShape(8.dp))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text, color = NeonCyan, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-    }
-}
-
-@Composable
-fun SmartSyncButton(state: UploadState, onClick: () -> Unit) {
-    val progress by animateFloatAsState(targetValue = if (state == UploadState.UPLOADING) 1f else 0f, animationSpec = tween(2500, easing = LinearEasing))
-    val containerColor by animateColorAsState(targetValue = if(state == UploadState.SUCCESS) NeonGreen else NeonDark)
-    val borderColor = if (state == UploadState.IDLE) NeonCyan else Color.Transparent
-    val textColor = if (state == UploadState.SUCCESS) Color.Black else NeonCyan
-
-    Box(
-        modifier = Modifier.fillMaxWidth().height(60.dp).clip(CutCornerShape(topStart = 20.dp, bottomEnd = 20.dp))
-            .background(containerColor).border(2.dp, borderColor, CutCornerShape(topStart = 20.dp, bottomEnd = 20.dp))
-            .clickable(onClick = onClick)
-    ) {
-        if (state == UploadState.UPLOADING) Box(Modifier.fillMaxHeight().fillMaxWidth(progress).background(Color(0xFFFF9900)))
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(text = when(state) {
-                UploadState.IDLE -> "UPLOAD CONFIGURATION"
-                UploadState.UPLOADING -> "UPLINKING [${(progress*100).toInt()}%]..."
-                UploadState.SUCCESS -> "SYNC COMPLETE"
-            }, color = textColor, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-        }
-    }
-}
-
-@Composable
-fun ProtocolCard(protocol: Protocol, current: Int, target: Int, unit: String, content: @Composable () -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    val color = Color(protocol.colorHex)
-    val progress = (current.toFloat() / target.toFloat()).coerceIn(0f, 1f)
-    val animatedProgress by animateFloatAsState(targetValue = progress)
-
-    Box(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clip(CutCornerShape(topStart = 12.dp, bottomEnd = 12.dp))
-            .background(color.copy(alpha = 0.05f)).border(1.dp, if(expanded) color else Color.DarkGray, CutCornerShape(topStart = 12.dp, bottomEnd = 12.dp))
-            .clickable { expanded = !expanded }
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                Column {
-                    Text(protocol.label, color = color, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-                    Text("$current / $target $unit", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                }
-                Box(Modifier.width(60.dp).height(6.dp).background(Color.Black)) {
-                    Box(Modifier.fillMaxHeight().fillMaxWidth(animatedProgress).background(color))
-                }
-            }
-            AnimatedVisibility(visible = expanded) {
-                Column(Modifier.padding(top = 16.dp)) {
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(Color.DarkGray))
-                    Spacer(Modifier.height(16.dp))
-                    content()
-                }
+            // Force state refresh
+            withContext(Dispatchers.Main) {
+                calculateHealth(Calendar.getInstance())
             }
         }
     }
-}
-
-@Composable
-fun TimeSlider(label: String, minutesVal: Float, onValueChange: (Float) -> Unit) {
-    val hour = (minutesVal / 60).toInt()
-    val min = (minutesVal % 60).toInt()
-    val timeStr = String.format("%02d:%02d", hour, min)
-    Column {
-        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-            Text(label, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            Text(timeStr, color = NeonCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        }
-        Slider(
-            value = minutesVal, onValueChange = onValueChange, valueRange = 0f..1439f, 
-            colors = SliderDefaults.colors(thumbColor = Color.LightGray, activeTrackColor = Color.DarkGray)
-        )
-    }
-}
-
-@Composable
-fun ConfigLabel(text: String) {
-    Text(text, color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, modifier = Modifier.padding(bottom = 10.dp))
 }
