@@ -21,7 +21,6 @@ import com.snakesan.vitalitysys.workers.AuditCheckWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
 
 class VitalityListenerService : WearableListenerService() {
@@ -31,23 +30,24 @@ class VitalityListenerService : WearableListenerService() {
 
         // Handle incoming alerts from Watch to trigger Phone notifications
         if (event.path == "/sys/alert_phone") {
-            val protoId = ByteBuffer.wrap(event.data).int
-            val protocol = Protocol.values().firstOrNull { it.id == protoId }
+            val alert = AlertPayload.fromBytes(event.data)
+            val protocol = Protocol.values().firstOrNull { it.id == alert.protocolId }
 
             if (protocol != null) {
                 createNotificationChannel()
-                triggerNotification(protocol)
+                triggerNotification(protocol, alert.itemKey, alert.message)
             }
         }
     }
 
-    private fun triggerNotification(protocol: Protocol) {
+    private fun triggerNotification(protocol: Protocol, itemKey: String, message: String) {
         val remoteInput = RemoteInput.Builder("KEY_TEXT_REPLY")
             .setLabel("State Current Vector...")
             .build()
 
         val replyIntent = Intent(this, NotificationReplyReceiver::class.java).apply {
             putExtra("PROTOCOL_ID", protocol.id)
+            putExtra("ITEM_KEY", itemKey)
         }
 
         val replyPendingIntent = PendingIntent.getBroadcast(
@@ -62,6 +62,7 @@ class VitalityListenerService : WearableListenerService() {
         val appIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             putExtra("PROTOCOL_ID", protocol.id)
+            putExtra("ITEM_KEY", itemKey)
         }
         val appPendingIntent = PendingIntent.getActivity(
             this, protocol.id, appIntent,
@@ -72,7 +73,7 @@ class VitalityListenerService : WearableListenerService() {
         val builder = NotificationCompat.Builder(this, "vitality_urgent")
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setContentTitle("PROTOCOL: ${protocol.label}")
-            .setContentText("Anomaly detected. Please state current vector.")
+            .setContentText(message.ifEmpty { "Anomaly detected. Please state current vector." })
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setColor(0xFF00F3FF.toInt())
             .setFullScreenIntent(appPendingIntent, true)

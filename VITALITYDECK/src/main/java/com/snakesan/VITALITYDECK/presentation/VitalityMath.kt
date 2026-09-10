@@ -27,72 +27,70 @@ object VitalityMath {
     ): Int {
         val minutesLate = currentMins - targetMins - grace
         if (minutesLate <= 0) return 0 // No penalty if within grace period
-        
+
         // Base penalty + continuous bleed based on how late we are
         return baseDmg + (minutesLate / tickRate)
     }
 
     /**
      * Evaluates the full system state and applies the Bio-Drift combo multiplier.
+     * @param completedKeys the set of today's completed dose/hygiene-task keys
+     *   (see SysConfig.doseKey / hygieneKey) — replaces the old single
+     *   medsTaken/maintDone booleans now that each protocol can hold any
+     *   number of user-defined reminders.
      */
     fun calculateSystemStatus(
         nutrientCount: Int,
         hydrationCount: Int,
-        medsTaken: Boolean,
-        maintDone: Boolean,
+        completedKeys: Set<String>,
         config: SysConfig
     ): VitalityPayload {
         val now = Calendar.getInstance()
         val currentMins = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
-        
+
         var totalDamage = 0
         var failingProtocols = 0
 
         // 1. NUTRIENT CHECK (Meals)
         var mealDamage = 0
-        if (nutrientCount < 1) {
-            mealDamage += calculateDoT(currentMins, config.meal1Time.toInt(), 30, 5, 5)
+        config.mealTimes.forEachIndexed { index, mealTime ->
+            if (nutrientCount < index + 1) {
+                mealDamage += calculateDoT(currentMins, mealTime, 30, 5, 5)
+            }
         }
-        if (nutrientCount < 2) {
-            mealDamage += calculateDoT(currentMins, config.meal2Time.toInt(), 30, 5, 5)
-        }
-        if (nutrientCount < 3) {
-            mealDamage += calculateDoT(currentMins, config.meal3Time.toInt(), 30, 5, 5)
-        }
-        
+
         if (mealDamage > 0) {
             totalDamage += mealDamage
             failingProtocols++
         }
 
-        // 2. CHEMISTRY CHECK (Meds)
-        if (!medsTaken) {
-            val dayOfWeek = now.get(Calendar.DAY_OF_WEEK)
-            val isWeekend = dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY
-            val target = if (isWeekend) config.medsWeekend.toInt() else config.medsWeekday.toInt()
-            
-            // Meds are critical: 10 base damage, ticks every 3 minutes
-            val medsDamage = calculateDoT(currentMins, target, 30, 10, 3)
-            if (medsDamage > 0) {
-                totalDamage += medsDamage
-                failingProtocols++
+        // 2. CHEMISTRY CHECK (Meds — any number of medications, each with any number of daily doses)
+        var medsDamage = 0
+        config.allDoses().forEach { dose ->
+            if (dose.key !in completedKeys) {
+                // Meds are critical: 10 base damage, ticks every 3 minutes
+                medsDamage += calculateDoT(currentMins, dose.time, 30, 10, 3)
             }
+        }
+        if (medsDamage > 0) {
+            totalDamage += medsDamage
+            failingProtocols++
         }
 
         // 3. HYDRATION CHECK (Volume over time)
         var hydroDamage = 0
         val startMins = config.activeStartHour.toInt() * 60
         val endMins = config.activeEndHour.toInt() * 60
-        
+
         if (currentMins in startMins..endMins) {
             val totalActive = endMins - startMins
             val elapsedActive = currentMins - startMins
-            
+
             // Integer approximation of expected progress
             val expectedMl = (config.hydrationTargetMl.toInt() * elapsedActive) / totalActive
             val actualMl = hydrationCount * 250
             val deficitMl = expectedMl - actualMl
-            
+
             // Grace amount: 500ml (2 drinks) behind is fine.
             if (deficitMl > 500) {
                 // 5 Base damage + 1 damage per 100ml behind target
@@ -102,13 +100,17 @@ object VitalityMath {
             }
         }
 
-        // 4. MAINTENANCE CHECK (Hygiene/Reset)
-        if (!maintDone) {
-            val maintDamage = calculateDoT(currentMins, config.maint1Time.toInt(), 60, 5, 10)
-            if (maintDamage > 0) {
-                totalDamage += maintDamage
-                failingProtocols++
+        // 4. MAINTENANCE CHECK (any number of user-defined hygiene tasks)
+        var maintDamage = 0
+        config.hygieneTasks.forEach { task ->
+            val key = SysConfig.hygieneKey(task.id)
+            if (key !in completedKeys) {
+                maintDamage += calculateDoT(currentMins, task.time, 60, 5, 10)
             }
+        }
+        if (maintDamage > 0) {
+            totalDamage += maintDamage
+            failingProtocols++
         }
 
         // --- BIO-DRIFT COMBO SYNERGY ---
@@ -130,7 +132,7 @@ object VitalityMath {
 
         val mealStatus = when {
             mealDamage > 0 -> 2 // 2 = REQUIRED (Bleeding)
-            nutrientCount < 3 && currentMins > (listOf(config.meal1Time, config.meal2Time, config.meal3Time)[nutrientCount].toInt() - 30) -> 1 // 1 = PREP (Within 30 mins)
+            nutrientCount < config.mealTimes.size && currentMins > (config.mealTimes[nutrientCount] - 30) -> 1 // 1 = PREP (Within 30 mins)
             else -> 0 // 0 = CLEAR
         }
 

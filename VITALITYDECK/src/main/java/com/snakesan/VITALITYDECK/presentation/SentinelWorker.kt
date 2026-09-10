@@ -13,12 +13,20 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.Wearable
-import java.nio.ByteBuffer
 import java.util.Calendar
 
 class SentinelWorker(val context: Context, workerParams: WorkerParameters) : CoroutineWorker(context, workerParams) {
 
     private val LOOKAHEAD_MINUTES = 20
+
+    // Flavor text for meal reminders, indexed by meal slot (up to the 5-meal cap).
+    private val MEAL_MESSAGES = listOf(
+        "Fuel cells empty. Intake imminent.",
+        "Systems flagging. Refuel required.",
+        "Running on fumes? Eat.",
+        "Extended fasting detected. Refuel.",
+        "Energy reserves critical. Eat now."
+    )
 
     override suspend fun doWork(): Result {
         val store = VitalityStore(context)
@@ -36,12 +44,12 @@ class SentinelWorker(val context: Context, workerParams: WorkerParameters) : Cor
             val isOverride = config.clinicalOverride > 0f
 
             if (isSleepTime && !isOverride) {
-                // User is sleeping, do not disturb. 
+                // User is sleeping, do not disturb.
                 return Result.success()
             }
 
             // Trigger Notification
-            triggerAlert(Protocol.CHEMISTRY, "STATUS CHECK: Update Pain Levels.")
+            triggerAlert(Protocol.CHEMISTRY, "", "STATUS CHECK: Update Pain Levels.")
             return Result.success()
         }
 
@@ -52,34 +60,36 @@ class SentinelWorker(val context: Context, workerParams: WorkerParameters) : Cor
         if (isDebug) {
             val protoId = inputData.getInt("DEBUG_PROTO", 2)
             val debugProto = Protocol.values().firstOrNull { it.id == protoId } ?: Protocol.HYDRATION
-            triggerAlert(debugProto, "DEBUG: Artificial System Stress Test.")
+            triggerAlert(debugProto, "", "DEBUG: Artificial System Stress Test.")
             return Result.success()
         }
 
-        val dayOfWeek = now.get(Calendar.DAY_OF_WEEK)
         val currentTimeMs = System.currentTimeMillis()
 
-        // 1. NUTRIENT CHECK
+        // 1. NUTRIENT CHECK — alert about the single most urgent pending meal slot, if any.
         val lastEat = store.getLastTime(Protocol.NUTRIENT)
         if (currentTimeMs - lastEat > 7200000) {
-            checkSchedule(config.meal1Time.toInt(), currentMinutes, Protocol.NUTRIENT, "Fuel cells empty. Intake imminent.")
-            checkSchedule(config.meal2Time.toInt(), currentMinutes, Protocol.NUTRIENT, "Systems flagging. Refuel required.")
-            checkSchedule(config.meal3Time.toInt(), currentMinutes, Protocol.NUTRIENT, "Running on fumes? Eat.")
+            val urgentMeal = config.mealTimes.withIndex()
+                .filter { (_, time) -> isDueOrOverdue(time, currentMinutes) }
+                .minByOrNull { (_, time) -> time }
+            urgentMeal?.let { (index, _) ->
+                triggerAlert(Protocol.NUTRIENT, "", MEAL_MESSAGES.getOrElse(index) { "Meal due." })
+            }
         }
 
-        // 2. MEDS CHECK
-        val isWeekend = (dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY)
-        val targetMeds = if (isWeekend) config.medsWeekend else config.medsWeekday
+        // 2. MEDS CHECK — any number of medications, each with any number of daily
+        // doses; alert about the single most urgent pending dose, if any.
+        val urgentDose = config.allDoses()
+            .filter { it.key !in store.completedKeys && isDueOrOverdue(it.time, currentMinutes) }
+            .minByOrNull { it.time }
+        urgentDose?.let { triggerAlert(Protocol.CHEMISTRY, it.key, "${it.medName} dose required.") }
 
-        if (!store.medsTaken) {
-            checkSchedule(targetMeds.toInt(), currentMinutes, Protocol.CHEMISTRY, "Chemistry imbalance detected. Dose required.")
-        }
-
-        // 3. MAINTENANCE CHECK
-        if (!store.maintDone) {
-            checkSchedule(config.maint1Time.toInt(), currentMinutes, Protocol.MAINTENANCE, "Hygiene check required.")
-            checkSchedule(config.maint2Time.toInt(), currentMinutes, Protocol.MAINTENANCE, "System reset required.")
-        }
+        // 3. MAINTENANCE CHECK — any number of user-defined hygiene tasks;
+        // alert about the single most urgent pending task, if any.
+        val urgentTask = config.hygieneTasks
+            .filter { SysConfig.hygieneKey(it.id) !in store.completedKeys && isDueOrOverdue(it.time, currentMinutes) }
+            .minByOrNull { it.time }
+        urgentTask?.let { triggerAlert(Protocol.MAINTENANCE, SysConfig.hygieneKey(it.id), "${it.label} due.") }
 
         // 4. HYDRATION CHECK
         checkHydrationDrift(config, currentMinutes, store.hydrationCount)
@@ -90,8 +100,7 @@ class SentinelWorker(val context: Context, workerParams: WorkerParameters) : Cor
         val payload = VitalityMath.calculateSystemStatus(
             nutrientCount = store.nutrientCount,
             hydrationCount = store.hydrationCount,
-            medsTaken = store.medsTaken,
-            maintDone = store.maintDone,
+            completedKeys = store.completedKeys,
             config = config
         )
 
@@ -108,33 +117,33 @@ class SentinelWorker(val context: Context, workerParams: WorkerParameters) : Cor
         return Result.success()
     }
 
-    private fun checkSchedule(targetTime: Int, currentTime: Int, protocol: Protocol, msg: String) {
+    // True when targetTime is due within LOOKAHEAD_MINUTES from now, or became
+    // due up to an hour ago (still worth alerting about).
+    private fun isDueOrOverdue(targetTime: Int, currentTime: Int): Boolean {
         val diff = targetTime - currentTime
-        if (diff <= LOOKAHEAD_MINUTES && diff > -60) {
-             triggerAlert(protocol, msg)
-        }
+        return diff <= LOOKAHEAD_MINUTES && diff > -60
     }
 
     private fun checkHydrationDrift(config: SysConfig, currentMinutes: Int, currentCount: Int) {
         val startMins = config.activeStartHour.toInt() * 60
         val endMins = config.activeEndHour.toInt() * 60
-        
+
         if (currentMinutes in startMins..endMins) {
             val totalActiveDuration = endMins - startMins
             val elapsedActive = currentMinutes - startMins
             val expectedProgress = elapsedActive.toFloat() / totalActiveDuration.toFloat()
             val expectedMl = config.hydrationTargetMl * expectedProgress
-            
+
             val currentMl = currentCount * 250
             val deficit = expectedMl - currentMl
-            
-            if (deficit > 375) { 
-                triggerAlert(Protocol.HYDRATION, "Hydration critical. You're drifting, Samurai.")
+
+            if (deficit > 375) {
+                triggerAlert(Protocol.HYDRATION, "", "Hydration critical. You're drifting, Samurai.")
             }
         }
     }
 
-    private fun triggerAlert(protocol: Protocol, message: String) {
+    private fun triggerAlert(protocol: Protocol, itemKey: String, message: String) {
         val channelId = "vitality_ai"
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -156,19 +165,18 @@ class SentinelWorker(val context: Context, workerParams: WorkerParameters) : Cor
             .build()
 
         nm.notify(protocol.id, notification)
-        
-        val buffer = ByteBuffer.allocate(4)
-        buffer.putInt(protocol.id)
-        
+
+        val payload = AlertPayload(protocol.id, itemKey, message)
+
         try {
             val nodes = Tasks.await(Wearable.getNodeClient(context).connectedNodes)
-            nodes.forEach { node -> 
+            nodes.forEach { node ->
                 try {
-                    Tasks.await(Wearable.getMessageClient(context).sendMessage(node.id, "/sys/alert_phone", buffer.array()))
+                    Tasks.await(Wearable.getMessageClient(context).sendMessage(node.id, "/sys/alert_phone", payload.toBytes()))
                 } catch(e: Exception) { e.printStackTrace() }
             }
         } catch (e: Exception) { e.printStackTrace() }
-        
+
         val v = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator else context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             v.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 50, 50, 50, 50, 100), -1))

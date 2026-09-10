@@ -43,8 +43,14 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     // --- STATE ---
     var nutrientCount by mutableIntStateOf(0)
     var hydrationCount by mutableIntStateOf(0)
-    var medsTaken by mutableStateOf(false)
-    var hygieneDone by mutableStateOf(false)
+    // Completed dose/hygiene-task keys for today (see SysConfig.doseKey /
+    // hygieneKey). Replaces the old single medsTaken/hygieneDone booleans
+    // now that Chemistry and Maintenance can each hold any number of
+    // user-defined reminders.
+    var completedKeys by mutableStateOf<Set<String>>(emptySet())
+    // Which specific item an in-flight interruption/notification is about
+    // (empty for NUTRIENT/HYDRATION, which have no sub-items).
+    var pendingItemKey by mutableStateOf("")
 
     var currentHP by mutableFloatStateOf(100f)
 
@@ -54,11 +60,18 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     var rangeStart by mutableLongStateOf(System.currentTimeMillis() - 604800000L)
     var rangeEnd by mutableLongStateOf(System.currentTimeMillis())
 
-    var meal1 by mutableFloatStateOf(540f)
-    var meal2 by mutableFloatStateOf(780f)
-    var meal3 by mutableFloatStateOf(1140f)
-    var medsWkday by mutableFloatStateOf(480f)
-    var medsWkend by mutableFloatStateOf(600f)
+    // Schedule config — user-editable lists rather than fixed slots.
+    var mealTimes = mutableStateListOf(540, 780, 1140)
+    var medications = mutableStateListOf(MedicationConfig(id = 1, name = "Medication", times = listOf(480)))
+    var hygieneTasks = mutableStateListOf(
+        HygieneTaskConfig(id = 1, label = "Morning Routine", time = 450),
+        HygieneTaskConfig(id = 2, label = "Evening Routine", time = 1320)
+    )
+    // Monotonic id counters so new medications/hygiene tasks never reuse an
+    // id that a stale completedKeys entry or pending notification refers to.
+    var nextMedId by mutableIntStateOf(2)
+    var nextHygieneId by mutableIntStateOf(3)
+
     var hydrationTarget by mutableFloatStateOf(3250f)
     var activeStart by mutableFloatStateOf(8f)
     var activeEnd by mutableFloatStateOf(22f)
@@ -108,14 +121,10 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         val prefs = getSharedPreferences("vitality_config", Context.MODE_PRIVATE)
-        meal1 = prefs.getFloat("meal1", 540f)
-        meal2 = prefs.getFloat("meal2", 780f)
-        meal3 = prefs.getFloat("meal3", 1140f)
-        medsWkday = prefs.getFloat("medsWkday", 480f)
-        medsWkend = prefs.getFloat("medsWkend", 600f)
-        hydrationTarget = prefs.getFloat("hydrationTarget", 3250f)
-        activeStart = prefs.getFloat("activeStart", 8f)
-        activeEnd = prefs.getFloat("activeEnd", 22f)
+        val storedConfig = prefs.getString("config_json", null)?.let {
+            try { SysConfig.fromJson(org.json.JSONObject(it)) } catch (e: Exception) { null }
+        } ?: SysConfig.DEFAULT
+        applyConfig(storedConfig)
 
         db = VitalityDatabase.getDatabase(this)
 
@@ -127,8 +136,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             if (stats != null) {
                 nutrientCount = stats.nutrientCount
                 hydrationCount = stats.hydrationCount
-                medsTaken = stats.medsTaken
-                hygieneDone = stats.hygieneDone
+                completedKeys = decodeKeySet(stats.completedKeys)
                 calculateHealth(Calendar.getInstance())
             }
         }
@@ -171,26 +179,41 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         setContent { NeonTheme { VitalityOrchestrator(this) } }
     }
 
+    // Builds a SysConfig snapshot from the phone's live editable state.
+    fun currentConfig(): SysConfig = SysConfig(
+        mealTimes = mealTimes.toList(),
+        medications = medications.toList(),
+        hygieneTasks = hygieneTasks.toList(),
+        hydrationTargetMl = hydrationTarget,
+        activeStartHour = activeStart,
+        activeEndHour = activeEnd,
+        clinicalOverride = if (clinicalOverride) 1f else 0f
+    )
+
+    // Populates the editable state lists (and id counters) from a loaded/synced config.
+    private fun applyConfig(config: SysConfig) {
+        mealTimes.clear(); mealTimes.addAll(config.mealTimes)
+        medications.clear(); medications.addAll(config.medications)
+        hygieneTasks.clear(); hygieneTasks.addAll(config.hygieneTasks)
+        hydrationTarget = config.hydrationTargetMl
+        activeStart = config.activeStartHour
+        activeEnd = config.activeEndHour
+        clinicalOverride = config.clinicalOverride > 0f
+        nextMedId = (medications.maxOfOrNull { it.id } ?: 0) + 1
+        nextHygieneId = (hygieneTasks.maxOfOrNull { it.id } ?: 0) + 1
+    }
+
     fun saveAndPushConfig() {
+        val config = currentConfig()
+        val json = config.toJson().toString()
+
         // Save locally for the HeartbeatWorker and next app launch
         val prefs = getSharedPreferences("vitality_config", Context.MODE_PRIVATE)
-        prefs.edit()
-            .putFloat("meal1", meal1).putFloat("meal2", meal2).putFloat("meal3", meal3)
-            .putFloat("medsWkday", medsWkday).putFloat("medsWkend", medsWkend)
-            .putFloat("hydrationTarget", hydrationTarget)
-            .putFloat("activeStart", activeStart).putFloat("activeEnd", activeEnd)
-            .apply()
+        prefs.edit().putString("config_json", json).apply()
 
         // Push to Watch
         val putDataReq = PutDataMapRequest.create("/vitality_config").apply {
-            dataMap.putFloat("meal1", meal1)
-            dataMap.putFloat("meal2", meal2)
-            dataMap.putFloat("meal3", meal3)
-            dataMap.putFloat("medsWkday", medsWkday)
-            dataMap.putFloat("medsWkend", medsWkend)
-            dataMap.putFloat("hydrationTarget", hydrationTarget)
-            dataMap.putFloat("activeStart", activeStart)
-            dataMap.putFloat("activeEnd", activeEnd)
+            dataMap.putString("config_json", json)
             dataMap.putLong("ts", System.currentTimeMillis())
         }.asPutDataRequest()
 
@@ -198,14 +221,20 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         Wearable.getDataClient(this).putDataItem(putDataReq)
     }
 
-    private fun persistState() {
+    fun completeItem(key: String) {
+        if (key.isEmpty()) return
+        completedKeys = completedKeys + key
+        persistState()
+        calculateHealth(Calendar.getInstance())
+    }
+
+    fun persistState() {
         val dayId = getTodayId()
         val stats = DailyStats(
             dayId = dayId,
             nutrientCount = nutrientCount,
             hydrationCount = hydrationCount,
-            medsTaken = medsTaken,
-            hygieneDone = hygieneDone,
+            completedKeys = encodeKeySet(completedKeys),
             lastUpdated = System.currentTimeMillis()
         )
         lifecycleScope.launch(Dispatchers.IO) {
@@ -216,21 +245,13 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     // --- DAMAGE LOGIC ENGINE ---
     fun calculateHealth(now: Calendar) {
         // 1. Build the config from the phone's live state variables
-        val currentConfig = SysConfig(
-            meal1Time = meal1, meal2Time = meal2, meal3Time = meal3,
-            medsWeekday = medsWkday, medsWeekend = medsWkend,
-            hydrationTargetMl = hydrationTarget,
-            activeStartHour = activeStart, activeEndHour = activeEnd,
-            maint1Time = 450f, maint2Time = 1320f,
-            clinicalOverride = if (clinicalOverride) 1f else 0f
-        )
+        val currentConfig = currentConfig()
 
         // 2. Feed it to the unified Math Engine
         val payload = VitalityMath.calculateSystemStatus(
             nutrientCount = nutrientCount,
             hydrationCount = hydrationCount,
-            medsTaken = medsTaken,
-            maintDone = hygieneDone,
+            completedKeys = completedKeys,
             config = currentConfig
         )
 
@@ -269,8 +290,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             try {
                 // Need the full payload from the last calculation to keep Watch informed
                 val payload = VitalityMath.calculateSystemStatus(
-                    nutrientCount, hydrationCount, medsTaken, hygieneDone,
-                    SysConfig(meal1, meal2, meal3, medsWkday, medsWkend, hydrationTarget, activeStart, activeEnd, 450f, 1320f, if(clinicalOverride) 1f else 0f)
+                    nutrientCount, hydrationCount, completedKeys, currentConfig()
                 )
 
                 val dataMapRequest = PutDataMapRequest.create("/vitality_status").apply {
@@ -304,8 +324,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
                     runOnUiThread {
                         nutrientCount = dataMap.getInt("nutrients", nutrientCount)
                         hydrationCount = dataMap.getInt("hydration", hydrationCount)
-                        medsTaken = dataMap.getBoolean("meds", medsTaken)
-                        hygieneDone = dataMap.getBoolean("maint", hygieneDone)
+                        completedKeys = decodeKeySet(dataMap.getString("completedKeys") ?: "")
 
                         calculateHealth(Calendar.getInstance())
                         persistState()
@@ -326,6 +345,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
                 activeProtocol = Protocol.CHEMISTRY
             } else if (protoId != -1) {
                 activeProtocol = Protocol.values().find { it.id == protoId }
+                pendingItemKey = intent.getStringExtra("ITEM_KEY") ?: ""
                 if (activeProtocol != null) {
                     if (activeProtocol == Protocol.NUTRIENT) {
                         appMode = AppMode.NUTRITION_CAPTURE
@@ -373,7 +393,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             // Otherwise, standard background processing
             when (telemetry.protocolId) {
                 0 -> nutrientCount++ // Failsafe, though intercepted above
-                1 -> medsTaken = true
+                1, 3 -> if (telemetry.itemKey.isNotEmpty()) completedKeys = completedKeys + telemetry.itemKey
                 2 -> {
                     hydrationCount++
                     // Forward the watch log directly to Health Connect!
@@ -381,18 +401,17 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
                         healthConnectManager.logWater(250.0)
                     }
                 }
-                3 -> hygieneDone = !hygieneDone
             }
             calculateHealth(Calendar.getInstance())
             persistState()
         }
 
         if (event.path == "/sys/alert_phone") {
-            val protoId = ByteBuffer.wrap(event.data).int
-            val protocol = Protocol.values().firstOrNull { it.id == protoId }
+            val alert = AlertPayload.fromBytes(event.data)
+            val protocol = Protocol.values().firstOrNull { it.id == alert.protocolId }
             if (protocol != null) {
                 runOnUiThread {
-                    activeDebugBleeds[protoId] = System.currentTimeMillis()
+                    activeDebugBleeds[alert.protocolId] = System.currentTimeMillis()
                     calculateHealth(Calendar.getInstance())
                 }
             }
@@ -481,8 +500,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
 
                 var nutCount = 0
                 var hydCount = 0
-                var medTaken = false
-                var hygiene = false
+                val dayCompletedKeys = mutableSetOf<String>()
 
                 // Inner helper to simulate a notification lifecycle
                 suspend fun generateEvent(protocol: String, hour: Int, minute: Int) {
@@ -563,8 +581,8 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
                         when (protocol) {
                             "NUTRIENT" -> nutCount++
                             "HYDRATION" -> hydCount++
-                            "CHEMISTRY" -> medTaken = true
-                            "MAINTENANCE" -> hygiene = true
+                            "CHEMISTRY" -> dayCompletedKeys.add(SysConfig.doseKey(medId = 1, doseIndex = 0))
+                            "MAINTENANCE" -> dayCompletedKeys.add(SysConfig.hygieneKey(taskId = 1))
                         }
                     }
                 }
@@ -593,7 +611,8 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
                 // Finalize Daily Stats
                 db.systemDao().setDailyStats(
                     com.snakesan.vitalitysys.data.DailyStats(
-                        dayId = dayId, nutrientCount = nutCount, hydrationCount = hydCount, medsTaken = medTaken, hygieneDone = hygiene
+                        dayId = dayId, nutrientCount = nutCount, hydrationCount = hydCount,
+                        completedKeys = encodeKeySet(dayCompletedKeys)
                     )
                 )
             }

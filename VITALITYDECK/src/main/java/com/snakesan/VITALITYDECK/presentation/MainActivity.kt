@@ -37,8 +37,11 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     var activeDeckIndex by mutableIntStateOf(0)
     var nutrientCount by mutableIntStateOf(0)
     var hydrationCount by mutableIntStateOf(0)
-    var medsTaken by mutableStateOf(false)
-    var maintenanceDone by mutableStateOf(false)
+    // Completed dose/hygiene-task keys for today (see SysConfig.doseKey /
+    // hygieneKey). Replaces the old single medsTaken/maintenanceDone
+    // booleans now that Chemistry and Maintenance can each hold any number
+    // of user-defined reminders.
+    var completedKeys by mutableStateOf<Set<String>>(emptySet())
     var config by mutableStateOf(SysConfig.DEFAULT)
     var syncState by mutableStateOf(SyncState.HIDDEN)
 
@@ -118,8 +121,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     private fun loadState() {
         nutrientCount = store.nutrientCount
         hydrationCount = store.hydrationCount
-        medsTaken = store.medsTaken
-        maintenanceDone = store.maintDone
+        completedKeys = store.completedKeys
         config = store.getConfig()
     }
 
@@ -136,8 +138,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         val putDataReq = PutDataMapRequest.create("/vitality_state").apply {
             dataMap.putInt("nutrients", store.nutrientCount)
             dataMap.putInt("hydration", store.hydrationCount)
-            dataMap.putBoolean("meds", store.medsTaken)
-            dataMap.putBoolean("maint", store.maintDone)
+            dataMap.putString("completedKeys", encodeKeySet(store.completedKeys))
             dataMap.putLong("timestamp", System.currentTimeMillis()) // Force sync
         }.asPutDataRequest()
 
@@ -149,19 +150,10 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         dataEvents.forEach { event ->
             if (event.type == DataEvent.TYPE_CHANGED && event.dataItem.uri.path == "/vitality_config") {
                 val map = DataMapItem.fromDataItem(event.dataItem).dataMap
-
-                val newConfig = SysConfig(
-                    meal1Time = map.getFloat("meal1", 540f),
-                    meal2Time = map.getFloat("meal2", 780f),
-                    meal3Time = map.getFloat("meal3", 1140f),
-                    medsWeekday = map.getFloat("medsWkday", 480f),
-                    medsWeekend = map.getFloat("medsWkend", 600f),
-                    hydrationTargetMl = map.getFloat("hydrationTarget", 3250f),
-                    activeStartHour = map.getFloat("activeStart", 8f),
-                    activeEndHour = map.getFloat("activeEnd", 22f),
-                    maint1Time = 450f, maint2Time = 1320f,
-                    clinicalOverride = 0f
-                )
+                val json = map.getString("config_json")
+                val newConfig = json?.let {
+                    try { SysConfig.fromJson(org.json.JSONObject(it)) } catch (e: Exception) { null }
+                } ?: return@forEach
 
                 store.saveConfig(newConfig)
                 config = newConfig
@@ -189,7 +181,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     private fun broadcastToOverseerLocal() {
         val payload = VitalityMath.calculateSystemStatus(
             nutrientCount = nutrientCount, hydrationCount = hydrationCount,
-            medsTaken = medsTaken, maintDone = maintenanceDone, config = config
+            completedKeys = completedKeys, config = config
         )
 
         // Calculate live DoT for any active debug triggers
@@ -270,7 +262,10 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     }
 
     private suspend fun sendTelemetry() {
-        val buffer = ByteBuffer.allocate(16); buffer.putInt(store.nutrientCount); buffer.putInt(store.hydrationCount); buffer.putInt(if(store.medsTaken) 1 else 0); buffer.putInt(if(store.maintDone) 1 else 0)
+        val keysBytes = encodeKeySet(store.completedKeys).toByteArray(Charsets.UTF_8)
+        val buffer = ByteBuffer.allocate(4 + 4 + 4 + keysBytes.size)
+        buffer.putInt(store.nutrientCount); buffer.putInt(store.hydrationCount)
+        buffer.putInt(keysBytes.size); buffer.put(keysBytes)
         withContext(Dispatchers.IO) {
             try {
                 val nodes = Tasks.await(Wearable.getNodeClient(this@MainActivity).connectedNodes)
@@ -279,7 +274,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         }
     }
 
-    fun logEvent(protocol: Protocol) {
+    fun logEvent(protocol: Protocol, itemKey: String = "") {
         vibrateAck(this, heavy = true)
         val now = System.currentTimeMillis()
 
@@ -288,17 +283,19 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
 
         when(protocol) {
             Protocol.NUTRIENT -> { store.nutrientCount++; nutrientCount = store.nutrientCount }
-            Protocol.CHEMISTRY -> { store.medsTaken = true; medsTaken = true }
             Protocol.HYDRATION -> { store.hydrationCount++; hydrationCount = store.hydrationCount }
-            Protocol.MAINTENANCE -> { store.maintDone = !store.maintDone; maintenanceDone = store.maintDone }
+            Protocol.CHEMISTRY, Protocol.MAINTENANCE -> if (itemKey.isNotEmpty()) {
+                store.completedKeys = store.completedKeys + itemKey
+                completedKeys = store.completedKeys
+            }
         }
         store.setLastTime(protocol, now)
-        
+
         broadcastToOverseerLocal()
         pushStateToDataLayer()
 
-        
-        val event = TelemetryEvent(protocol.id, now)
+
+        val event = TelemetryEvent(protocol.id, now, itemKey)
         Wearable.getNodeClient(this).connectedNodes.addOnSuccessListener { nodes -> nodes.forEach { Wearable.getMessageClient(this).sendMessage(it.id, "/sys/telemetry", event.toBytes()) } }
     }
 

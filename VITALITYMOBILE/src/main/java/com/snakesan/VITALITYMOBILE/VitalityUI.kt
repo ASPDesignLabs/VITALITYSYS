@@ -63,6 +63,7 @@ fun VitalityOrchestrator(activity: MainActivity) {
                         // 2. Fulfill protocol logic
                         activity.fulfillProtocolAudit(Protocol.NUTRIENT.id)
                         activity.nutrientCount++
+                        activity.persistState()
                         activity.userContext = "OPTIMIZED NUTRITION VECTOR"
                         activity.appMode = AppMode.INTERRUPT_RESTORE
                     }
@@ -145,15 +146,15 @@ fun InterruptionOverlay(activity: MainActivity) {
                     activity.fulfillProtocolAudit(protocol.id)
 
                     when(protocol) {
-                        Protocol.NUTRIENT -> activity.nutrientCount++
-                        Protocol.CHEMISTRY -> activity.medsTaken = true
+                        Protocol.NUTRIENT -> { activity.nutrientCount++; activity.persistState() }
+                        Protocol.CHEMISTRY, Protocol.MAINTENANCE -> activity.completeItem(activity.pendingItemKey)
                         Protocol.HYDRATION -> {
                             activity.hydrationCount++
+                            activity.persistState()
                             activity.lifecycleScope.launch(Dispatchers.IO) {
                                 activity.healthConnectManager.logWater(250.0)
                             }
                         }
-                        Protocol.MAINTENANCE -> activity.hygieneDone = true
                     }
                     activity.appMode = AppMode.INTERRUPT_RESTORE
                 }
@@ -206,8 +207,7 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
         }
 
         LaunchedEffect(
-            activity.meal1, activity.meal2, activity.meal3,
-            activity.medsWkday, activity.medsWkend,
+            activity.mealTimes.toList(), activity.medications.toList(), activity.hygieneTasks.toList(),
             activity.hydrationTarget, activity.activeStart, activity.activeEnd
         ) {
             kotlinx.coroutines.delay(1000)
@@ -221,17 +221,77 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
 
         Spacer(Modifier.height(12.dp))
 
-        ProtocolCard(Protocol.NUTRIENT, activity.nutrientCount, 3, "MEALS") {
-            ConfigLabel("INTAKE SCHEDULE")
-            TimeSlider("MEAL 1", activity.meal1) { activity.meal1 = it }
-            TimeSlider("MEAL 2", activity.meal2) { activity.meal2 = it }
-            TimeSlider("MEAL 3", activity.meal3) { activity.meal3 = it }
+        val liveConfig = activity.currentConfig()
+        val doses = liveConfig.allDoses()
+        val completedDoseCount = doses.count { it.key in activity.completedKeys }
+        val completedHygieneCount = liveConfig.hygieneTasks.count { SysConfig.hygieneKey(it.id) in activity.completedKeys }
+
+        ProtocolCard(Protocol.NUTRIENT, activity.nutrientCount, activity.mealTimes.size, "MEALS") {
+            ConfigLabel("INTAKE SCHEDULE (1-5 MEALS)")
+            activity.mealTimes.forEachIndexed { index, time ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) {
+                        TimeSlider("MEAL ${index + 1}", time.toFloat()) { activity.mealTimes[index] = it.toInt() }
+                    }
+                    if (activity.mealTimes.size > 1) {
+                        Spacer(Modifier.width(8.dp))
+                        SmallActionButton("REMOVE", NeonPink) { activity.mealTimes.removeAt(index) }
+                    }
+                }
+            }
+            if (activity.mealTimes.size < 5) {
+                Spacer(Modifier.height(8.dp))
+                SmallActionButton("+ ADD MEAL", NeonCyan, Modifier.fillMaxWidth()) {
+                    val lastTime = activity.mealTimes.lastOrNull() ?: 720
+                    activity.mealTimes.add((lastTime + 180).coerceAtMost(1439))
+                }
+            }
         }
 
-        ProtocolCard(Protocol.CHEMISTRY, if(activity.medsTaken) 1 else 0, 1, if(activity.medsTaken) "COMPLIANT" else "PENDING") {
-            ConfigLabel("DOSAGE TIMING")
-            TimeSlider("WEEKDAY", activity.medsWkday) { activity.medsWkday = it }
-            TimeSlider("WEEKEND", activity.medsWkend) { activity.medsWkend = it }
+        ProtocolCard(Protocol.CHEMISTRY, completedDoseCount, doses.size.coerceAtLeast(1), if (doses.isEmpty()) "NONE SET" else "DOSES") {
+            ConfigLabel("MEDICATIONS")
+            activity.medications.forEachIndexed { medIndex, med ->
+                Column(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        BasicTextField(
+                            value = med.name,
+                            onValueChange = { activity.medications[medIndex] = med.copy(name = it) },
+                            textStyle = TextStyle(color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold),
+                            cursorBrush = SolidColor(NeonPink),
+                            modifier = Modifier.weight(1f).border(1.dp, Color.DarkGray, CutCornerShape(4.dp)).padding(8.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        SmallActionButton("REMOVE MED", NeonPink) { activity.medications.removeAt(medIndex) }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    med.times.forEachIndexed { timeIndex, time ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) {
+                                TimeSlider("DOSE ${timeIndex + 1}", time.toFloat()) { newVal ->
+                                    val newTimes = med.times.toMutableList().apply { this[timeIndex] = newVal.toInt() }
+                                    activity.medications[medIndex] = med.copy(times = newTimes)
+                                }
+                            }
+                            if (med.times.size > 1) {
+                                Spacer(Modifier.width(8.dp))
+                                SmallActionButton("X", NeonPink) {
+                                    val newTimes = med.times.toMutableList().apply { removeAt(timeIndex) }
+                                    activity.medications[medIndex] = med.copy(times = newTimes)
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    SmallActionButton("+ ADD DOSE TIME", NeonCyan) {
+                        val lastTime = med.times.lastOrNull() ?: 480
+                        activity.medications[medIndex] = med.copy(times = med.times + (lastTime + 360).coerceAtMost(1439))
+                    }
+                }
+            }
+            SmallActionButton("+ ADD MEDICATION", NeonCyan, Modifier.fillMaxWidth()) {
+                activity.medications.add(MedicationConfig(id = activity.nextMedId, name = "New Medication", times = listOf(480)))
+                activity.nextMedId++
+            }
         }
 
         ProtocolCard(Protocol.HYDRATION, activity.hydrationCount, (activity.hydrationTarget / 250).toInt(), "DOSES") {
@@ -259,8 +319,31 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
             )
         }
 
-        ProtocolCard(Protocol.MAINTENANCE, if(activity.hygieneDone) 1 else 0, 1, if(activity.hygieneDone) "OPTIMAL" else "DEGRADED") {
-            Text("HARDCODED: 07:30 // 22:00", color = Color.Gray, fontSize = 10.sp)
+        ProtocolCard(
+            Protocol.MAINTENANCE, completedHygieneCount, liveConfig.hygieneTasks.size.coerceAtLeast(1),
+            if (liveConfig.hygieneTasks.isEmpty()) "NONE SET" else "TASKS"
+        ) {
+            ConfigLabel("HYGIENE TASKS")
+            activity.hygieneTasks.forEachIndexed { index, task ->
+                Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        BasicTextField(
+                            value = task.label,
+                            onValueChange = { activity.hygieneTasks[index] = task.copy(label = it) },
+                            textStyle = TextStyle(color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold),
+                            cursorBrush = SolidColor(NeonAmber),
+                            modifier = Modifier.weight(1f).border(1.dp, Color.DarkGray, CutCornerShape(4.dp)).padding(8.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        SmallActionButton("REMOVE", NeonPink) { activity.hygieneTasks.removeAt(index) }
+                    }
+                    TimeSlider("TIME", task.time.toFloat()) { activity.hygieneTasks[index] = task.copy(time = it.toInt()) }
+                }
+            }
+            SmallActionButton("+ ADD TASK", NeonCyan, Modifier.fillMaxWidth()) {
+                activity.hygieneTasks.add(HygieneTaskConfig(id = activity.nextHygieneId, label = "New Task", time = 480))
+                activity.nextHygieneId++
+            }
         }
 
         Spacer(Modifier.weight(1f))

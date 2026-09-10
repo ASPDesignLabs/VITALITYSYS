@@ -283,12 +283,25 @@ fun PainInterface(
 @Composable
 fun StandardProtocolInterface(protocol: Protocol, activity: MainActivity, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // For Chemistry/Maintenance, show one thing at a time — the single
+        // soonest-due pending item — rather than a scrollable list, so the
+        // watch face stays a quick glance instead of another list to page
+        // through. itemKey is "" when there's nothing left pending today;
+        // logEvent() no-ops on an empty key for these two protocols.
+        var itemKey = ""
+        var buttonLabel = "LOG ENTRY"
+
         when(protocol) {
-            Protocol.NUTRIENT -> BigDataDisplay("INTAKE LOG", "${activity.nutrientCount}", "MEALS", color)
+            Protocol.NUTRIENT -> BigDataDisplay("INTAKE LOG", "${activity.nutrientCount}", "/ ${activity.config.mealTimes.size}", color)
             Protocol.CHEMISTRY -> {
-                val status = if(activity.medsTaken) "COMPLIANT" else "REQUIRED"
-                val subColor = if(activity.medsTaken) NeonGreen else color
-                BigDataDisplay("DOSE STATUS", status, "", subColor)
+                val dose = activity.config.nextPendingDose(activity.completedKeys)
+                if (dose != null) {
+                    itemKey = dose.key
+                    BigDataDisplay("NEXT DOSE", dose.medName, formatClock(dose.time), color)
+                } else {
+                    buttonLabel = "ALL CLEAR"
+                    BigDataDisplay("DOSE STATUS", "COMPLIANT", "", NeonGreen)
+                }
             }
             Protocol.HYDRATION -> {
                 HydrationMonitor(
@@ -300,19 +313,31 @@ fun StandardProtocolInterface(protocol: Protocol, activity: MainActivity, color:
                 )
             }
             Protocol.MAINTENANCE -> {
-                val status = if(activity.maintenanceDone) "OPTIMAL" else "DEGRADED"
-                val subColor = if(activity.maintenanceDone) NeonGreen else color
-                BigDataDisplay("HYGIENE SYS", status, "", subColor)
+                val task = activity.config.nextPendingHygieneTask(activity.completedKeys)
+                if (task != null) {
+                    itemKey = SysConfig.hygieneKey(task.id)
+                    BigDataDisplay("NEXT TASK", task.label, formatClock(task.time), color)
+                } else {
+                    buttonLabel = "ALL CLEAR"
+                    BigDataDisplay("HYGIENE SYS", "OPTIMAL", "", NeonGreen)
+                }
             }
         }
         Spacer(Modifier.height(15.dp))
         CyberButton(
-            text = "LOG ENTRY", 
-            color = color, 
-            onClick = { activity.logEvent(protocol) },
+            text = buttonLabel,
+            color = color,
+            onClick = { activity.logEvent(protocol, itemKey) },
             onLongClick = { activity.forceRunSentinel(protocol) }
         )
     }
+}
+
+// Formats minutes-since-midnight as "HH:MM" for the watch's next-due-item display.
+fun formatClock(minutesSinceMidnight: Int): String {
+    val hour = (minutesSinceMidnight / 60) % 24
+    val minute = minutesSinceMidnight % 60
+    return String.format("%02d:%02d", hour, minute)
 }
 
 // --- HELPER COMPOSABLES RETAINED (Just ensuring signatures match) ---

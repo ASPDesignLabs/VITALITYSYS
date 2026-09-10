@@ -2,6 +2,8 @@ package com.snakesan.vitalitysys.data
 
 import android.content.Context
 import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 // --- ENTITIES ---
@@ -20,8 +22,11 @@ data class DailyStats(
     @PrimaryKey val dayId: Int,
     val nutrientCount: Int = 0,
     val hydrationCount: Int = 0,
-    val medsTaken: Boolean = false,
-    val hygieneDone: Boolean = false,
+    // Comma-joined set of completed dose/hygiene-task keys for this day
+    // (see SysConfig.doseKey / hygieneKey and encodeKeySet/decodeKeySet).
+    // Replaces the old single medsTaken/hygieneDone booleans now that each
+    // protocol can hold any number of user-defined reminders.
+    val completedKeys: String = "",
     val lastUpdated: Long = System.currentTimeMillis()
 )
 
@@ -98,11 +103,45 @@ interface SystemDao {
     fun getRecentAudits(): Flow<List<NotificationAudit>>
 }
 
+// --- MIGRATIONS ---
+
+// v3 -> v4: daily_stats swaps its single medsTaken/hygieneDone booleans for
+// a completedKeys column (a set of per-medication-dose / per-hygiene-task
+// keys), since Chemistry and Maintenance now support any number of
+// user-defined reminders instead of one fixed slot each. There's no
+// meaningful way to map an old boolean onto specific new item keys (those
+// items didn't exist yet), so historical completedKeys start blank; counts
+// and timestamps carry over untouched, and system_logs / notification_audit
+// (the actual history/audit trail) are left completely alone.
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS daily_stats_new (
+                dayId INTEGER NOT NULL PRIMARY KEY,
+                nutrientCount INTEGER NOT NULL DEFAULT 0,
+                hydrationCount INTEGER NOT NULL DEFAULT 0,
+                completedKeys TEXT NOT NULL DEFAULT '',
+                lastUpdated INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            INSERT INTO daily_stats_new (dayId, nutrientCount, hydrationCount, completedKeys, lastUpdated)
+            SELECT dayId, nutrientCount, hydrationCount, '', lastUpdated FROM daily_stats
+            """.trimIndent()
+        )
+        db.execSQL("DROP TABLE daily_stats")
+        db.execSQL("ALTER TABLE daily_stats_new RENAME TO daily_stats")
+    }
+}
+
 // --- DATABASE ---
 
 @Database(
     entities = [SystemLog::class, DailyStats::class, NotificationAudit::class],
-    version = 3
+    version = 4
 )
 abstract class VitalityDatabase : RoomDatabase() {
     abstract fun systemDao(): SystemDao
@@ -113,7 +152,12 @@ abstract class VitalityDatabase : RoomDatabase() {
         fun getDatabase(context: Context): VitalityDatabase {
             return INSTANCE ?: synchronized(this) {
                 Room.databaseBuilder(context, VitalityDatabase::class.java, "vitality_blackbox.db")
-                    .fallbackToDestructiveMigration()
+                    .addMigrations(MIGRATION_3_4)
+                    // Only pre-migration-tracked versions fall back to a
+                    // destructive reset; v3 -> v4 always goes through the
+                    // real migration above so system_logs/audit history
+                    // survives the upgrade.
+                    .fallbackToDestructiveMigrationFrom(1, 2)
                     .build().also { INSTANCE = it }
             }
         }
