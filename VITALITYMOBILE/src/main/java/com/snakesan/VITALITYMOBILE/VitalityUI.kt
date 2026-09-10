@@ -11,7 +11,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -19,6 +18,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -113,9 +113,9 @@ fun InterruptionOverlay(activity: MainActivity) {
                 BasicTextField(
                     value = text,
                     onValueChange = { text = it },
-                    textStyle = TextStyle(color = NeonCyan, fontSize = 22.sp, fontWeight = FontWeight.Bold),
+                    textStyle = TextStyle(color = NeonCyan, fontSize = 22.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace),
                     cursorBrush = SolidColor(NeonCyan),
-                    modifier = Modifier.fillMaxWidth().border(1.dp, NeonCyan, CutCornerShape(8.dp)).padding(20.dp)
+                    modifier = Modifier.fillMaxWidth().border(1.dp, NeonCyan, VitalityShape).padding(20.dp)
                 )
 
                 Spacer(Modifier.height(30.dp))
@@ -256,9 +256,9 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
                         BasicTextField(
                             value = med.name,
                             onValueChange = { activity.medications[medIndex] = med.copy(name = it) },
-                            textStyle = TextStyle(color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold),
+                            textStyle = TextStyle(color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace),
                             cursorBrush = SolidColor(NeonPink),
-                            modifier = Modifier.weight(1f).border(1.dp, Color.DarkGray, CutCornerShape(4.dp)).padding(8.dp)
+                            modifier = Modifier.weight(1f).border(1.dp, Color.DarkGray, VitalityShape).padding(8.dp)
                         )
                         Spacer(Modifier.width(8.dp))
                         SmallActionButton("REMOVE MED", NeonPink) { activity.medications.removeAt(medIndex) }
@@ -330,9 +330,9 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
                         BasicTextField(
                             value = task.label,
                             onValueChange = { activity.hygieneTasks[index] = task.copy(label = it) },
-                            textStyle = TextStyle(color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold),
+                            textStyle = TextStyle(color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace),
                             cursorBrush = SolidColor(NeonAmber),
-                            modifier = Modifier.weight(1f).border(1.dp, Color.DarkGray, CutCornerShape(4.dp)).padding(8.dp)
+                            modifier = Modifier.weight(1f).border(1.dp, Color.DarkGray, VitalityShape).padding(8.dp)
                         )
                         Spacer(Modifier.width(8.dp))
                         SmallActionButton("REMOVE", NeonPink) { activity.hygieneTasks.removeAt(index) }
@@ -460,14 +460,10 @@ fun DiagnosticModule(allLogs: List<SystemLog>, allAudits: List<NotificationAudit
                 Spacer(Modifier.height(10.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(
+                    NeonToggle(
                         checked = isClinicalExport,
                         onCheckedChange = { isClinicalExport = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White, checkedTrackColor = Color.LightGray,
-                            uncheckedThumbColor = NeonCyan, uncheckedTrackColor = Color.DarkGray
-                        ),
-                        modifier = Modifier.scale(0.8f)
+                        activeColor = NeonCyan
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
@@ -481,7 +477,7 @@ fun DiagnosticModule(allLogs: List<SystemLog>, allAudits: List<NotificationAudit
 
                 val rangeSdf = SimpleDateFormat("MM/dd", Locale.US)
                 Row(
-                    Modifier.fillMaxWidth().clickable { showDatePicker = true }.border(1.dp, Color.Gray, CutCornerShape(4.dp)).padding(8.dp),
+                    Modifier.fillMaxWidth().clickable { showDatePicker = true }.border(1.dp, Color.Gray, VitalityShape).padding(8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("RANGE:", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
@@ -552,12 +548,8 @@ fun DataGovernanceModule(activity: MainActivity) {
                 Spacer(Modifier.height(10.dp))
 
                 Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.weight(1f).height(40.dp).background(Color.DarkGray.copy(alpha=0.3f)).clickable { activity.deleteLastHour() }, contentAlignment = Alignment.Center) {
-                        Text("LAST 1H", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Box(Modifier.weight(1f).height(40.dp).background(Color.DarkGray.copy(alpha=0.3f)).clickable { activity.deleteLast24Hours() }, contentAlignment = Alignment.Center) {
-                        Text("LAST 24H", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    }
+                    SmallActionButton("LAST 1H", Color.LightGray, Modifier.weight(1f)) { activity.deleteLastHour() }
+                    SmallActionButton("LAST 24H", Color.LightGray, Modifier.weight(1f)) { activity.deleteLast24Hours() }
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -587,7 +579,7 @@ fun DataGovernanceModule(activity: MainActivity) {
 
                 val rangeSdf = SimpleDateFormat("MM/dd/yyyy", Locale.US)
                 Row(
-                    Modifier.fillMaxWidth().clickable { showDatePicker = true }.border(1.dp, NeonPink, CutCornerShape(4.dp)).padding(8.dp),
+                    Modifier.fillMaxWidth().clickable { showDatePicker = true }.border(1.dp, NeonPink, VitalityShape).padding(8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("TARGET:", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
@@ -601,14 +593,7 @@ fun DataGovernanceModule(activity: MainActivity) {
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Color.DarkGray))
                 Spacer(Modifier.height(20.dp))
 
-                Box(
-                    modifier = Modifier.fillMaxWidth().height(50.dp).clip(CutCornerShape(8.dp))
-                        .background(Color.Red.copy(alpha = 0.2f)).border(1.dp, Color.Red, CutCornerShape(8.dp))
-                        .clickable(onClick = { activity.wipeAllData() }),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("FACTORY RESET (LOGS ONLY)", color = Color.Red, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                }
+                CyberButtonBlock("FACTORY RESET (LOGS ONLY)", color = Color.Red) { activity.wipeAllData() }
             }
         }
     }
@@ -635,7 +620,8 @@ fun DateRangePickerModal(
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel", color = Color.Gray) }
         },
-        colors = DatePickerDefaults.colors(containerColor = Color(0xFF121212))
+        shape = VitalityShape,
+        colors = DatePickerDefaults.colors(containerColor = Graphite)
     ) {
         DateRangePicker(
             state = datePickerState,
@@ -643,7 +629,7 @@ fun DateRangePickerModal(
             headline = { Text("Start - End", color = NeonCyan, modifier = Modifier.padding(16.dp)) },
             showModeToggle = false,
             colors = DatePickerDefaults.colors(
-                containerColor = Color(0xFF121212), titleContentColor = Color.White, headlineContentColor = NeonCyan,
+                containerColor = Graphite, titleContentColor = Color.White, headlineContentColor = NeonCyan,
                 weekdayContentColor = NeonCyan, subheadContentColor = Color.Gray, yearContentColor = Color.White,
                 currentYearContentColor = NeonCyan, selectedYearContentColor = Color.White,
                 selectedDayContainerColor = NeonCyan, dayContentColor = Color.White, selectedDayContentColor = Color.Black,
