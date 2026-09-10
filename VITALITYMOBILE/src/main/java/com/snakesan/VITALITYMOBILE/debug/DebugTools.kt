@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.snakesan.vitalitysys.BuildConfig
 import com.snakesan.vitalitysys.CyberButtonBlock
 import com.snakesan.vitalitysys.DateRangePickerModal
 import com.snakesan.vitalitysys.MainActivity
@@ -27,13 +28,15 @@ import java.util.Date
 import java.util.Locale
 
 // The ADMIN panel: fuzzy-data injection, overcharge injection, quick purge,
-// surgical deletion, and factory reset. Everything here is gated behind
-// DebugFlags so it's invisible during normal day-to-day use — long-press
-// the header to switch debug mode on when you need to test something, then
-// switch it back off.
+// surgical deletion, and factory reset. Gated two ways: it doesn't exist at
+// all unless this is a debug build (BuildConfig.DEBUG — see build.gradle.kts),
+// and even then it stays collapsed/off until you long-press the header to
+// switch DebugFlags on for testing, then switch it back off.
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DebugPanel(activity: MainActivity) {
+    if (!BuildConfig.DEBUG) return
+
     val context = LocalContext.current
     var debugEnabled by remember { mutableStateOf(DebugFlags.isEnabled(context)) }
     var isRevealed by remember { mutableStateOf(false) }
