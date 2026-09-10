@@ -15,21 +15,36 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-
+private val MIN_TOUCH_TARGET = 44.dp
 
 @Composable
-fun CyberButtonBlock(text: String, onClick: () -> Unit) {
+fun CyberButtonBlock(text: String, color: Color = NeonCyan, onClick: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
     Box(
-        modifier = Modifier.fillMaxWidth().height(50.dp).clip(CutCornerShape(8.dp))
-            .background(NeonCyan.copy(alpha = 0.1f)).border(1.dp, NeonCyan.copy(alpha = 0.5f), CutCornerShape(8.dp))
-            .clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp).clip(VitalityHeroShape)
+            .background(color.copy(alpha = 0.12f)).border(2.dp, color, VitalityHeroShape)
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onClick()
+            },
         contentAlignment = Alignment.Center
     ) {
-        Text(text, color = NeonCyan, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        Text(
+            text.uppercase(),
+            color = color,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 2.sp,
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 12.dp)
+        )
     }
 }
 
@@ -41,8 +56,8 @@ fun ProtocolCard(protocol: Protocol, current: Int, target: Int, unit: String, co
     val animatedProgress by animateFloatAsState(targetValue = progress, label = "CardProgress")
 
     Box(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clip(CutCornerShape(topStart = 12.dp, bottomEnd = 12.dp))
-            .background(color.copy(alpha = 0.05f)).border(1.dp, if(expanded) color else Color.DarkGray, CutCornerShape(topStart = 12.dp, bottomEnd = 12.dp))
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clip(VitalityShape)
+            .background(color.copy(alpha = 0.05f)).border(1.dp, if(expanded) color else Color.DarkGray, VitalityShape)
             .clickable { expanded = !expanded }
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -92,15 +107,58 @@ fun ConfigLabel(text: String) {
 // variable-length schedule editors (meals, medications, hygiene tasks).
 @Composable
 fun SmallActionButton(text: String, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
     Box(
         modifier = modifier
-            .clip(CutCornerShape(topStart = 6.dp, bottomEnd = 6.dp))
+            .heightIn(min = MIN_TOUCH_TARGET)
+            .clip(VitalityShape)
             .background(color.copy(alpha = 0.12f))
-            .border(1.dp, color.copy(alpha = 0.5f), CutCornerShape(topStart = 6.dp, bottomEnd = 6.dp))
-            .clickable(onClick = onClick)
+            .border(1.dp, color, VitalityShape)
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onClick()
+            }
             .padding(horizontal = 12.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(text, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+        Text(text.uppercase(), color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+    }
+}
+
+// Cut-corner cyberpunk stand-in for the stock Material pill-shaped Switch, so
+// on/off toggles match the rest of the NEON design language instead of
+// standing out as a default-themed control. Ported from ACK's own NeonToggle.
+@Composable
+fun NeonToggle(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    activeColor: Color = NeonCyan
+) {
+    val haptic = LocalHapticFeedback.current
+    val thumbOffset = animateDpAsState(
+        targetValue = if (checked) 26.dp else 0.dp,
+        animationSpec = tween(150),
+        label = "toggleThumb"
+    ).value
+
+    Box(
+        modifier = modifier
+            .width(56.dp)
+            .height(28.dp)
+            .border(1.dp, if (checked) activeColor else Color.DarkGray, CutCornerShape(6.dp))
+            .background(if (checked) activeColor.copy(alpha = 0.12f) else Color.Transparent, CutCornerShape(6.dp))
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onCheckedChange(!checked)
+            }
+            .padding(3.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = thumbOffset)
+                .size(20.dp)
+                .background(if (checked) activeColor else Color.Gray, CutCornerShape(3.dp))
+        )
     }
 }
