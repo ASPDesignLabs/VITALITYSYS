@@ -1,0 +1,1103 @@
+<title>VITALITY.SYS</title>
+<meta name="description" content="A phone + Wear OS system that tracks meals, hydration, medication, and hygiene as a single HP number instead of a checklist — fully offline, GPL-3.0.">
+
+<!-- Open Graph / Twitter card. Image is a pending asset slot (see assets/README.md) —
+     tags are wired to the final path now so nothing else needs editing once
+     assets/social/og-card.png is dropped in and pushed. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="VITALITY.SYS">
+<meta property="og:url" content="https://aspdesignlabs.github.io/VITALITYSYS/">
+<meta property="og:title" content="VITALITY.SYS — vitals, not checklists">
+<meta property="og:description" content="A phone + Wear OS system that tracks meals, hydration, medication, and hygiene as a single HP number instead of a checklist — fully offline, GPL-3.0.">
+<meta property="og:image" content="https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="VITALITY.SYS logo — a neon pink EKG trace on a black grid — beside the text VITALITY.SYS.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="VITALITY.SYS — vitals, not checklists">
+<meta name="twitter:description" content="A phone + Wear OS system that tracks meals, hydration, medication, and hygiene as a single HP number instead of a checklist — fully offline, GPL-3.0.">
+<meta name="twitter:image" content="https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.png">
+<meta name="twitter:image:alt" content="VITALITY.SYS logo — a neon pink EKG trace on a black grid — beside the text VITALITY.SYS.">
+
+<noscript><style>.accordion-panel[hidden] { display: block !important; }</style></noscript>
+
+<style>
+  :root {
+    --void: #050505;
+    --graphite: #121212;
+    --graphite-2: #171717;
+    --border: #2a2a2a;
+    --text: #e8e8e8;
+    --text-dim: #a8a8a8;
+    --text-faint: #808080;
+    --cyan: #00f3ff;   /* NUTRIENT protocol */
+    --pink: #ff0055;   /* CHEMISTRY protocol / critical */
+    --green: #00ff41;  /* HYDRATION protocol / optimal */
+    --amber: #ff9900;  /* MAINTENANCE protocol / warning */
+    --font-display: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --cut-sm: 10px 2px 2px 10px;   /* VitalityShape: topStart topEnd bottomEnd bottomStart, see below */
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  body {
+    background: var(--void);
+    color: var(--text);
+    font-family: var(--font-body);
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  h1, h2, h3, .font-display { font-family: var(--font-display); }
+
+  a { color: var(--cyan); }
+  a:hover { color: var(--green); }
+
+  .skip-link {
+    position: absolute;
+    left: -999px;
+    top: 0;
+    background: var(--pink);
+    color: var(--void);
+    font-family: var(--font-display);
+    font-weight: 700;
+    padding: 0.9em 1.4em;
+    z-index: 100;
+    text-decoration: none;
+  }
+  .skip-link:focus {
+    left: 1em;
+    top: 1em;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--green);
+    outline-offset: 2px;
+  }
+
+  /* --- Cut-corner motif, ported from the app's own VitalityShape / VitalityHeroShape --- */
+  .cut-panel {
+    clip-path: polygon(
+      0 10px, 10px 0,
+      calc(100% - 2px) 0, 100% 2px,
+      100% calc(100% - 10px), calc(100% - 10px) 100%,
+      2px 100%, 0 calc(100% - 2px)
+    );
+  }
+  .cut-hero {
+    clip-path: polygon(
+      0 0, calc(100% - 20px) 0, 100% 20px,
+      100% 100%, 20px 100%, 0 calc(100% - 20px)
+    );
+  }
+
+  .wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem;
+  }
+
+  .eyebrow {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem;
+  }
+
+  /* --- Nav --- */
+  nav.top {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(5, 5, 5, 0.92);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner {
+    max-width: 1000px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    padding: 0.75rem 1.25rem;
+  }
+  .nav-brand {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    color: var(--cyan);
+    text-decoration: none;
+    font-size: 1rem;
+    white-space: nowrap;
+  }
+  .nav-brand:hover { color: var(--cyan); text-decoration: underline; }
+  .nav-groups {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+  details.nav-pill { position: relative; }
+  details.nav-pill > summary {
+    list-style: none;
+    cursor: pointer;
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-dim);
+    background: var(--graphite);
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    clip-path: polygon(0 6px, 6px 0, 100% 0, 100% 100%, calc(100% - 6px) 100%, 0 100%);
+  }
+  details.nav-pill > summary::-webkit-details-marker { display: none; }
+  details.nav-pill > summary::marker { content: ""; }
+  details.nav-pill[open] > summary { color: var(--green); border-color: var(--green); }
+  details.nav-pill > summary .car { transition: transform 0.15s ease; display: inline-block; }
+  details.nav-pill[open] > summary .car { transform: rotate(180deg); }
+  .nav-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 230px;
+    background: var(--graphite);
+    border: 1px solid var(--cyan);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+    padding: 0.4rem 0;
+    z-index: 20;
+  }
+  .nav-dropdown a {
+    display: block;
+    padding: 0.6rem 1rem;
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 0.9rem;
+  }
+  .nav-dropdown a:hover, .nav-dropdown a:focus-visible { color: var(--cyan); background: rgba(0,243,255,0.06); }
+
+  /* --- Hero --- */
+  .hero {
+    text-align: center;
+    padding-top: 3.5rem;
+  }
+  .hero-mark {
+    width: 84px;
+    height: 84px;
+    margin: 0 auto 1.25rem;
+    display: block;
+  }
+  .hero h1 {
+    font-size: clamp(1.8rem, 5vw, 2.75rem);
+    letter-spacing: 0.08em;
+    color: var(--text);
+    margin: 0 0 0.5rem;
+  }
+  .hero h1 .dot { color: var(--pink); }
+  .hero .tagline {
+    font-size: clamp(1rem, 2.4vw, 1.25rem);
+    color: var(--cyan);
+    font-family: var(--font-display);
+    font-weight: 700;
+    max-width: 40ch;
+    margin: 0 auto 1.25rem;
+  }
+  .hero p.lede {
+    max-width: 56ch;
+    margin: 0 auto 1.75rem;
+    color: var(--text-dim);
+  }
+  .hero-ctas {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  .btn {
+    display: inline-block;
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    font-size: 0.85rem;
+    text-decoration: none;
+    padding: 0.9rem 1.6rem;
+    border: 2px solid var(--cyan);
+    color: var(--cyan);
+    background: rgba(0,243,255,0.08);
+  }
+  .btn:hover, .btn:focus-visible { background: rgba(0,243,255,0.18); color: var(--cyan); }
+  .btn.btn-ghost {
+    border-color: var(--border);
+    color: var(--text-dim);
+    background: transparent;
+  }
+  .btn.btn-ghost:hover, .btn.btn-ghost:focus-visible { border-color: var(--text-dim); color: var(--text); }
+
+  /* --- Status banner --- */
+  .banner {
+    max-width: 860px;
+    margin: 0 auto 2.5rem;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--amber);
+    background: rgba(255,153,0,0.06);
+    color: var(--text);
+    font-size: 0.9rem;
+  }
+  .banner strong { color: var(--amber); font-family: var(--font-display); }
+
+  /* --- Sections --- */
+  section.wrap h2 {
+    font-size: 1.5rem;
+    letter-spacing: 0.04em;
+    color: var(--text);
+    margin: 0 0 0.75rem;
+  }
+  section.wrap > p { color: var(--text-dim); }
+
+  .accordion-toggle {
+    all: unset;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.6rem;
+    width: 100%;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+  }
+  .accordion-toggle h2 { margin: 0; }
+  .accordion-toggle:hover h2 { color: var(--cyan); }
+  .accordion-toggle:focus-visible { outline: 3px solid var(--green); outline-offset: 4px; }
+  .accordion-toggle .chevron {
+    font-family: var(--font-display);
+    color: var(--text-faint);
+    transition: transform 0.15s ease;
+    flex: none;
+  }
+  .accordion-toggle[aria-expanded="true"] .chevron { transform: rotate(180deg); color: var(--cyan); }
+  .accordion-panel { padding-top: 1.25rem; }
+
+  /* --- Cards --- */
+  .card {
+    background: var(--graphite);
+    border: 1px solid var(--border);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .card h3 {
+    font-size: 1rem;
+    letter-spacing: 0.05em;
+    margin: 0 0 0.4rem;
+  }
+  .card p { margin: 0; color: var(--text-dim); font-size: 0.95rem; }
+  .protocol-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  .protocol-card { border-left-width: 3px; border-left-style: solid; }
+  .protocol-card .proto-label {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+    display: block;
+  }
+  .p-nutrient { border-left-color: var(--cyan); }
+  .p-nutrient .proto-label { color: var(--cyan); }
+  .p-chemistry { border-left-color: var(--pink); }
+  .p-chemistry .proto-label { color: var(--pink); }
+  .p-hydration { border-left-color: var(--green); }
+  .p-hydration .proto-label { color: var(--green); }
+  .p-maintenance { border-left-color: var(--amber); }
+  .p-maintenance .proto-label { color: var(--amber); }
+
+  blockquote {
+    margin: 1.25rem 0;
+    padding: 1rem 1.25rem;
+    border-left: 3px solid var(--pink);
+    background: var(--graphite);
+    color: var(--text);
+    font-style: normal;
+  }
+  blockquote cite {
+    display: block;
+    margin-top: 0.6rem;
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    color: var(--text-faint);
+    font-style: normal;
+  }
+
+  code, .kbd {
+    font-family: var(--font-display);
+    background: var(--graphite-2);
+    padding: 0.1em 0.4em;
+    border: 1px solid var(--border);
+    font-size: 0.85em;
+    color: var(--green);
+  }
+
+  ul.feature-list { padding-left: 1.2rem; color: var(--text-dim); }
+  ul.feature-list li { margin-bottom: 0.5rem; }
+  ul.feature-list strong { color: var(--text); }
+
+  /* --- Screenshot thumbnails / lightbox --- */
+  .shot-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  .shot-thumb {
+    all: unset;
+    cursor: pointer;
+    position: relative;
+    width: 130px;
+    height: 230px;
+    background: repeating-linear-gradient(45deg, var(--graphite), var(--graphite) 10px, var(--graphite-2) 10px, var(--graphite-2) 20px);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-faint);
+    text-align: center;
+    font-size: 0.7rem;
+    font-family: var(--font-display);
+    padding: 0.5rem;
+  }
+  .shot-thumb.shot-square { width: 150px; height: 150px; }
+  .shot-thumb:hover, .shot-thumb:focus-visible { border-color: var(--cyan); color: var(--cyan); }
+  .shot-thumb-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .shot-thumb svg { width: 22px; height: 22px; margin-bottom: 0.4rem; }
+  .shot-thumb .shot-caption { display: block; }
+
+  dialog.shot-dialog {
+    border: 1px solid var(--cyan);
+    background: var(--void);
+    color: var(--text);
+    padding: 0;
+    width: min(92vw, 640px);
+    max-height: 88vh;
+    overflow-y: auto;
+  }
+  dialog.shot-dialog::backdrop { background: rgba(0,0,0,0.75); }
+  .shot-dialog-close {
+    all: unset;
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    cursor: pointer;
+    color: var(--text-dim);
+    background: var(--graphite);
+    border: 1px solid var(--border);
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+  }
+  .shot-dialog-close:hover, .shot-dialog-close:focus-visible { color: var(--pink); border-color: var(--pink); }
+  .shot-stage {
+    position: relative;
+    width: 100%;
+    height: 60vh;
+    max-height: 500px;
+    overflow: hidden;
+    background: var(--graphite);
+    touch-action: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .shot-stage-placeholder {
+    color: var(--text-faint);
+    font-family: var(--font-display);
+    font-size: 0.9rem;
+    text-align: center;
+    padding: 1rem;
+  }
+  .shot-image {
+    max-width: 100%;
+    max-height: 100%;
+    user-select: none;
+    -webkit-user-drag: none;
+    cursor: grab;
+  }
+  .shot-controls {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    padding: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+  .shot-controls button {
+    font-family: var(--font-display);
+    background: var(--graphite);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    min-width: 44px;
+    min-height: 44px;
+    cursor: pointer;
+  }
+  .shot-controls button:hover, .shot-controls button:focus-visible { color: var(--cyan); border-color: var(--cyan); }
+  .shot-hint {
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    padding: 0 1rem 1rem;
+    margin: 0;
+  }
+
+  /* --- Footer --- */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2.5rem 1.25rem 3rem;
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 0.85rem;
+  }
+  footer .foot-links {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+    font-family: var(--font-display);
+  }
+  footer a { color: var(--text-dim); text-decoration: underline; }
+  footer a:hover, footer a:focus-visible { color: var(--cyan); }
+
+  @media (max-width: 480px) {
+    .shot-thumb { width: 110px; height: 195px; }
+  }
+</style>
+
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<nav class="top" aria-label="Section navigation">
+  <div class="nav-inner">
+    <a class="nav-brand" href="#main">VITALITY.SYS</a>
+    <div class="nav-groups">
+      <details class="nav-pill">
+        <summary>System <span class="car" aria-hidden="true">&#9662;</span></summary>
+        <div class="nav-dropdown">
+          <a href="#how-it-works">How it works</a>
+          <a href="#protocols">Protocols</a>
+          <a href="#interrupt-capture">Interrupt capture</a>
+        </div>
+      </details>
+      <details class="nav-pill">
+        <summary>Tracking <span class="car" aria-hidden="true">&#9662;</span></summary>
+        <div class="nav-dropdown">
+          <a href="#pain-logging">Pain logging</a>
+          <a href="#reports">Reports &amp; audits</a>
+        </div>
+      </details>
+      <details class="nav-pill">
+        <summary>Project <span class="car" aria-hidden="true">&#9662;</span></summary>
+        <div class="nav-dropdown">
+          <a href="#watch-app">Watch app</a>
+          <a href="#privacy">Privacy &amp; offline</a>
+          <a href="#overseer">Overseer</a>
+          <a href="#get-it">Get it</a>
+        </div>
+      </details>
+    </div>
+  </div>
+</nav>
+
+<main id="main">
+
+  <section class="hero wrap">
+    <svg class="hero-mark" viewBox="0 0 100 100" role="img" aria-label="VITALITY.SYS logo: a pink EKG heartbeat trace on a black grid">
+      <rect width="100" height="100" fill="#050505"/>
+      <g stroke="#2a2a2a" stroke-width="1">
+        <path d="M0 20H100M0 40H100M0 60H100M0 80H100M20 0V100M40 0V100M60 0V100M80 0V100"/>
+      </g>
+      <path d="M0 50 H30 L38 30 L46 68 L54 22 L62 60 L70 50 H100" fill="none" stroke="#ff0055" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <h1>VITALITY<span class="dot">.</span>SYS</h1>
+    <p class="tagline">Vitals, not checklists.</p>
+    <p class="lede">
+      A phone app and a standalone Wear OS watch app that track meals,
+      hydration, medication, and hygiene as one live HP number — built to
+      make missed self-care <em>felt</em>, the way a video game makes
+      low health felt, instead of sitting quietly in a to-do list.
+    </p>
+    <div class="hero-ctas">
+      <a class="btn" href="https://github.com/ASPDesignLabs/VITALITYSYS">View on GitHub</a>
+      <a class="btn btn-ghost" href="#how-it-works">See how it works</a>
+    </div>
+  </section>
+
+  <div class="banner">
+    <strong>Status:</strong> actively-developed personal accessibility
+    project, built and dogfooded by one person. Not distributed on the
+    Play Store — build it from source (see <a href="#get-it">Get it</a>).
+    Screenshots on this page are placeholders until real captures are
+    dropped in.
+  </div>
+
+  <section id="how-it-works" class="wrap">
+    <p class="eyebrow">Core mechanic</p>
+    <h2>How it works</h2>
+    <p>
+      Instead of four separate reminders you can each individually ignore,
+      VITALITY.SYS collapses meals, medication, hydration, and hygiene
+      into a single <strong>HP value from 0 to 100</strong>, recalculated
+      continuously. Each of the four areas below — the app calls them
+      <strong>protocols</strong> — can bleed HP on its own the longer it's
+      neglected: a short grace period, then a base penalty, then a steady
+      drip for every extra minute you're behind.
+    </p>
+    <p>
+      Two effects sit on top of that base math:
+    </p>
+    <ul class="feature-list">
+      <li>
+        <strong>Bio-Drift.</strong> If more than one protocol is failing
+        at the same time, the damage doesn't just add up — it compounds.
+        Letting hydration and a medication dose slide together costs more
+        than letting either slide alone, which mirrors how skipped
+        self-care actually tends to cascade.
+      </li>
+      <li>
+        <strong>Overcharge.</strong> Holding 100 HP continuously for about
+        an hour fills a second "shield" meter. It's a reward for a solid
+        stretch, and it resets instantly the moment HP drops below 100 —
+        no coasting on a good streak.
+      </li>
+    </ul>
+    <p>
+      The number is shared live between your phone and your watch over
+      Bluetooth (no server involved — see <a href="#privacy">Privacy &amp;
+      offline</a>), so the watch isn't a passive mirror of the phone. It's
+      built to be the thing you actually glance at and act on, with the
+      phone as the fuller dashboard and configuration surface.
+    </p>
+  </section>
+
+  <section id="protocols" class="wrap">
+    <h2>
+      <button type="button" class="accordion-toggle" aria-expanded="false" aria-controls="protocols-panel">
+        The four protocols
+        <span class="chevron" aria-hidden="true">&#9662;</span>
+      </button>
+    </h2>
+    <div id="protocols-panel" class="accordion-panel" hidden>
+      <p>
+        Every protocol is user-configurable — none of this is fixed
+        slots. Set as many meals, medications, dose times, and hygiene
+        tasks as you actually have.
+      </p>
+      <div class="protocol-grid">
+        <div class="card protocol-card p-nutrient">
+          <span class="proto-label">Nutrient</span>
+          <h3>Meals</h3>
+          <p>
+            Schedule 1–5 meal times. Logging one opens a macro-entry
+            screen — calories, protein, fat, fiber, sugar — and writes
+            the meal to Android Health Connect as a nutrition record.
+          </p>
+        </div>
+        <div class="card protocol-card p-chemistry">
+          <span class="proto-label">Chemistry</span>
+          <h3>Medication</h3>
+          <p>
+            Any number of medications, each with any number of daily
+            doses, each tracked separately. This protocol's damage curve
+            is the steepest of the four by design — missed doses matter
+            most.
+          </p>
+        </div>
+        <div class="card protocol-card p-hydration">
+          <span class="proto-label">Hydration</span>
+          <h3>Fluids</h3>
+          <p>
+            Each log adds a fixed 250&nbsp;mL toward a target you set,
+            paced across your own defined "active hours" window, and
+            writes a hydration record to Health Connect.
+          </p>
+        </div>
+        <div class="card protocol-card p-maintenance">
+          <span class="proto-label">Maintenance</span>
+          <h3>Hygiene &amp; self-care</h3>
+          <p>
+            Any number of your own named tasks — morning routine, evening
+            routine, or whatever you actually need reminding of — each
+            with its own scheduled time.
+          </p>
+        </div>
+      </div>
+      <p>
+        Every protocol's action is one tap, on phone or watch. Chemistry
+        and Maintenance never show you a scrollable list of pending
+        items — just the single soonest-due one, so the watch stays a
+        quick glance instead of another list to page through.
+      </p>
+      <div class="shot-row">
+        <button type="button" class="shot-thumb" data-shot-name="Phone dashboard" data-shot-src="assets/screenshots/dashboard.png">
+          <span class="shot-thumb-sr">View phone dashboard screenshot, full size</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+          <span class="shot-caption">Dashboard<br>coming soon</span>
+        </button>
+        <button type="button" class="shot-thumb" data-shot-name="Nutrition macro scan" data-shot-src="assets/screenshots/nutrition-scan.png">
+          <span class="shot-thumb-sr">View nutrition macro scan screenshot, full size</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+          <span class="shot-caption">Macro scan<br>coming soon</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section id="interrupt-capture" class="wrap">
+    <h2>
+      <button type="button" class="accordion-toggle" aria-expanded="false" aria-controls="interrupt-capture-panel">
+        Interrupt capture
+        <span class="chevron" aria-hidden="true">&#9662;</span>
+      </button>
+    </h2>
+    <div id="interrupt-capture-panel" class="accordion-panel" hidden>
+      <p>
+        When a protocol comes due and you open it, the phone asks one
+        question first: <strong>what were you doing?</strong> A short
+        free-text note, before you're allowed to mark the action done.
+      </p>
+      <p>
+        Once you confirm, it shows a "system optimized" screen that hands
+        the exact thing you typed back to you before returning to the
+        dashboard. It's built around getting pulled out of a task by a
+        bodily need, not just clearing a reminder — the app tries to make
+        sure you land back where you actually were.
+      </p>
+      <div class="shot-row">
+        <button type="button" class="shot-thumb" data-shot-name="Interrupt capture flow" data-shot-src="assets/screenshots/interrupt-capture.png">
+          <span class="shot-thumb-sr">View interrupt capture flow screenshot, full size</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+          <span class="shot-caption">Interrupt capture<br>coming soon</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section id="pain-logging" class="wrap">
+    <h2>
+      <button type="button" class="accordion-toggle" aria-expanded="false" aria-controls="pain-logging-panel">
+        Pain &amp; symptom logging
+        <span class="chevron" aria-hidden="true">&#9662;</span>
+      </button>
+    </h2>
+    <div id="pain-logging-panel" class="accordion-panel" hidden>
+      <p>
+        A separate flow from the four protocols: log a symptom on a 0–10
+        scale (from <em>resolved</em> up through <em>critical</em>) with a
+        short note on location, type, and triggers — from the watch or
+        the phone.
+      </p>
+      <p>
+        Logging anything above a 3 automatically schedules a 60-minute
+        follow-up check-in, unless it's inside your configured sleep
+        window — which can itself be overridden when round-the-clock
+        monitoring is actually wanted.
+      </p>
+      <div class="shot-row">
+        <button type="button" class="shot-thumb shot-square" data-shot-name="Watch pain logging" data-shot-src="assets/screenshots/watch-pain.png">
+          <span class="shot-thumb-sr">View watch pain logging screenshot, full size</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+          <span class="shot-caption">Pain logging<br>coming soon</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section id="reports" class="wrap">
+    <h2>
+      <button type="button" class="accordion-toggle" aria-expanded="false" aria-controls="reports-panel">
+        Reports &amp; compliance audits
+        <span class="chevron" aria-hidden="true">&#9662;</span>
+      </button>
+    </h2>
+    <div id="reports-panel" class="accordion-panel" hidden>
+      <p>
+        Every alert the system fires is tracked end to end — issued,
+        interacted with, fulfilled — and graded success / warning /
+        failure, rolled up into a per-protocol A–F compliance score.
+      </p>
+      <p>
+        From the phone you can generate a multi-page PDF report, in
+        either the app's own dark "system" theme or a plain light
+        "clinical" theme meant for sharing with a doctor or care team. It
+        covers the raw event log, 24-hour/7-day/30-day summaries,
+        per-protocol response latency, which hour of the day tends to see
+        the most abandoned alerts, and a response-time histogram — handed
+        off through the normal Android share sheet.
+      </p>
+      <div class="shot-row">
+        <button type="button" class="shot-thumb" data-shot-name="Diagnostics and export panel" data-shot-src="assets/screenshots/diagnostics-export.png">
+          <span class="shot-thumb-sr">View diagnostics and export panel screenshot, full size</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+          <span class="shot-caption">Export panel<br>coming soon</span>
+        </button>
+        <button type="button" class="shot-thumb" data-shot-name="Sample exported PDF report" data-shot-src="assets/screenshots/pdf-report.png">
+          <span class="shot-thumb-sr">View sample exported PDF report screenshot, full size</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+          <span class="shot-caption">PDF report<br>coming soon</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section id="watch-app" class="wrap">
+    <h2>
+      <button type="button" class="accordion-toggle" aria-expanded="false" aria-controls="watch-app-panel">
+        The watch app
+        <span class="chevron" aria-hidden="true">&#9662;</span>
+      </button>
+    </h2>
+    <div id="watch-app-panel" class="accordion-panel" hidden>
+      <p>
+        VITALITY.SYS ships as a standalone Wear OS app — it keeps running
+        its own schedule and alerts even when the phone is out of
+        Bluetooth range, then re-syncs once it's back.
+      </p>
+      <p>
+        Navigation is built for the bezel: rotate to move between five
+        decks (one per protocol, plus pain logging), or tap the top and
+        bottom edges of the screen. Each deck shows exactly one piece of
+        live status and one action button — nothing to scroll through.
+      </p>
+      <div class="shot-row">
+        <button type="button" class="shot-thumb shot-square" data-shot-name="Watch deck protocol view" data-shot-src="assets/screenshots/watch-deck.png">
+          <span class="shot-thumb-sr">View watch deck protocol screenshot, full size</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+          <span class="shot-caption">Watch deck<br>coming soon</span>
+        </button>
+        <button type="button" class="shot-thumb shot-square" data-shot-name="Watch rotary navigation" data-shot-src="assets/gifs/watch-rotary-nav.gif">
+          <span class="shot-thumb-sr">View watch rotary navigation recording, full size</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+          <span class="shot-caption">Rotary nav<br>coming soon</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section id="privacy" class="wrap">
+    <h2>
+      <button type="button" class="accordion-toggle" aria-expanded="false" aria-controls="privacy-panel">
+        Privacy &amp; offline design
+        <span class="chevron" aria-hidden="true">&#9662;</span>
+      </button>
+    </h2>
+    <div id="privacy-panel" class="accordion-panel" hidden>
+      <p>
+        Neither app requests the <code>INTERNET</code> permission, and
+        there is no networking code anywhere in either module. The only
+        channel between phone and watch is Bluetooth, and Health Connect
+        writes stay on-device. Everything else — logs, audits, daily
+        stats, your schedule — lives in a local database and
+        SharedPreferences. No accounts, no cloud sync, no analytics or
+        crash-reporting SDKs.
+      </p>
+      <blockquote>
+        "VITALITY.SYS operates on a strict self-sovereign data matrix...
+        telemetry regarding hydration and macromolecular ingestion is
+        syndicated strictly locally to your device's core repository. We
+        do not broadcast your physiological status to megacorps."
+        <cite>— the app's own Health Connect permissions screen</cite>
+      </blockquote>
+      <p>
+        The one admin/debug panel in the codebase (data resets, synthetic
+        test alerts) doesn't exist at all in a release build — it's
+        compiled out unless the APK is built as a debug variant, and even
+        then it stays off until explicitly switched on for testing.
+      </p>
+    </div>
+  </section>
+
+  <section id="overseer" class="wrap">
+    <h2>
+      <button type="button" class="accordion-toggle" aria-expanded="false" aria-controls="overseer-panel">
+        Part of a larger system: Overseer
+        <span class="chevron" aria-hidden="true">&#9662;</span>
+      </button>
+    </h2>
+    <div id="overseer-panel" class="accordion-panel" hidden>
+      <p>
+        VITALITY.SYS doesn't run in isolation on the watch. It broadcasts
+        its live HP and status locally to a sibling project,
+        <strong>Overseer</strong>, and can be paused by it — the two are
+        designed as modules in one broader personal system rather than as
+        one all-in-one app.
+      </p>
+      <p>
+        Overseer has its own project page:
+        <a href="https://aspdesignlabs.github.io/OVERSEER">aspdesignlabs.github.io/OVERSEER</a>.
+      </p>
+    </div>
+  </section>
+
+  <section id="get-it" class="wrap">
+    <p class="eyebrow">Source</p>
+    <h2>Get it</h2>
+    <p>
+      There's no Play Store listing. Build it yourself from source with
+      Gradle, or watch the repo's Releases page for prebuilt APKs.
+    </p>
+    <div class="hero-ctas" style="justify-content: flex-start;">
+      <a class="btn" href="https://github.com/ASPDesignLabs/VITALITYSYS">Source on GitHub</a>
+      <a class="btn btn-ghost" href="https://github.com/ASPDesignLabs/VITALITYSYS/releases">Releases</a>
+    </div>
+  </section>
+
+</main>
+
+<dialog class="shot-dialog" id="shotDialog" aria-label="Screenshot preview">
+  <button type="button" class="shot-dialog-close" data-shot-close aria-label="Close screenshot preview">&#10005;</button>
+  <div class="shot-stage" id="shotStage">
+    <div class="shot-stage-placeholder" id="shotPlaceholder" hidden><span id="shotPlaceholderText">Screenshot coming soon</span></div>
+    <img id="shotImage" class="shot-image" alt="" draggable="false" hidden>
+  </div>
+  <div class="shot-controls">
+    <button type="button" data-shot-zoom-out aria-label="Zoom out">&minus;</button>
+    <button type="button" data-shot-zoom-reset aria-label="Reset zoom">1:1</button>
+    <button type="button" data-shot-zoom-in aria-label="Zoom in">+</button>
+  </div>
+  <p class="shot-hint">Double-click, pinch, or scroll to zoom &middot; drag to pan while zoomed &middot; Esc to close</p>
+</dialog>
+
+<footer>
+  <div class="foot-links">
+    <a href="https://github.com/ASPDesignLabs/VITALITYSYS">GitHub</a>
+    <a href="https://github.com/ASPDesignLabs/VITALITYSYS/blob/main/LICENSE">GPL-3.0 License</a>
+    <a href="https://aspdesignlabs.github.io/OVERSEER">Overseer</a>
+  </div>
+  <p>VITALITY.SYS is free software, licensed GPL-3.0. No warranty, personal project, built by one person for their own use.</p>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  /* --- Nav pills: mutual exclusion, outside click, Escape --- */
+  var navPills = document.querySelectorAll('details.nav-pill');
+  navPills.forEach(function (d) {
+    d.addEventListener('toggle', function () {
+      if (d.open) navPills.forEach(function (o) { if (o !== d) o.open = false; });
+    });
+  });
+  document.addEventListener('click', function (e) {
+    navPills.forEach(function (d) { if (d.open && !d.contains(e.target)) d.open = false; });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    navPills.forEach(function (d) {
+      if (d.open) { d.open = false; var s = d.querySelector('summary'); if (s) s.focus(); }
+    });
+  });
+
+  /* --- Collapsible sections --- */
+  function setExpanded(btn, expanded) {
+    btn.setAttribute('aria-expanded', String(expanded));
+    var panel = document.getElementById(btn.getAttribute('aria-controls'));
+    if (panel) panel.hidden = !expanded;
+  }
+  document.querySelectorAll('.accordion-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      setExpanded(btn, btn.getAttribute('aria-expanded') !== 'true');
+    });
+  });
+
+  function expandSectionById(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var btn = el.querySelector('.accordion-toggle');
+    if (btn && btn.getAttribute('aria-expanded') !== 'true') setExpanded(btn, true);
+  }
+  function expandFromHash() { if (location.hash) expandSectionById(location.hash.slice(1)); }
+  expandFromHash();
+  window.addEventListener('hashchange', expandFromHash);
+
+  document.querySelectorAll('.nav-dropdown a').forEach(function (a) {
+    a.addEventListener('click', function () {
+      expandSectionById(a.getAttribute('href').slice(1));
+      navPills.forEach(function (d) { d.open = false; });
+    });
+  });
+
+  /* --- Screenshot lightbox --- */
+  var dialog = document.getElementById('shotDialog');
+  var stage = document.getElementById('shotStage');
+  var img = document.getElementById('shotImage');
+  var placeholder = document.getElementById('shotPlaceholder');
+  var placeholderText = document.getElementById('shotPlaceholderText');
+  var lastTrigger = null;
+
+  var zoom = 1, panX = 0, panY = 0;
+  var MIN_ZOOM = 1, MAX_ZOOM = 4;
+
+  function applyTransform() {
+    img.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoom + ')';
+    img.style.cursor = zoom > 1 ? 'grab' : 'default';
+  }
+
+  function resetZoom() {
+    zoom = 1; panX = 0; panY = 0;
+    applyTransform();
+  }
+
+  function setZoom(newZoom) {
+    zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, newZoom));
+    if (zoom === MIN_ZOOM) { panX = 0; panY = 0; } // avoid the image sitting stuck off-center at 1x
+    applyTransform();
+  }
+
+  document.querySelectorAll('.shot-thumb').forEach(function (btn) {
+    var src = btn.getAttribute('data-shot-src');
+    if (src) {
+      // Single existence probe shared by the thumbnail background and the
+      // dialog's full-size view, so a missing asset costs one failed
+      // request instead of two -- it stays a striped placeholder until a
+      // real file is dropped in (see assets/README.md).
+      var thumbProbe = new Image();
+      thumbProbe.onload = function () {
+        btn.style.backgroundImage = 'url(' + src + ')';
+        btn.style.backgroundSize = 'cover';
+        btn.style.backgroundPosition = 'center';
+      };
+      thumbProbe.src = src;
+    }
+    btn.addEventListener('click', function () {
+      lastTrigger = btn;
+      var name = btn.getAttribute('data-shot-name') || 'Screenshot';
+      dialog.setAttribute('aria-label', name + ' preview');
+      resetZoom();
+
+      var probe = new Image();
+      probe.onload = function () {
+        img.src = src;
+        img.alt = name + ' screenshot';
+        img.hidden = false;
+        placeholder.hidden = true;
+      };
+      probe.onerror = function () {
+        img.hidden = true;
+        placeholder.hidden = false;
+        placeholderText.textContent = name + ' — screenshot coming soon';
+      };
+      if (src) { probe.src = src; } else { probe.onerror(); }
+
+      if (typeof dialog.showModal === 'function') dialog.showModal();
+      else dialog.setAttribute('open', '');
+    });
+  });
+
+  function closeDialog() {
+    if (typeof dialog.close === 'function' && dialog.open) dialog.close();
+    else dialog.removeAttribute('open');
+    if (lastTrigger) { lastTrigger.focus(); lastTrigger = null; }
+  }
+
+  dialog.querySelector('[data-shot-close]').addEventListener('click', closeDialog);
+  dialog.addEventListener('click', function (e) {
+    if (e.target === dialog) closeDialog(); // backdrop click on <dialog> itself
+  });
+  dialog.addEventListener('cancel', function (e) {
+    e.preventDefault();
+    closeDialog();
+  });
+
+  dialog.querySelector('[data-shot-zoom-in]').addEventListener('click', function () { setZoom(zoom + 0.5); });
+  dialog.querySelector('[data-shot-zoom-out]').addEventListener('click', function () { setZoom(zoom - 0.5); });
+  dialog.querySelector('[data-shot-zoom-reset]').addEventListener('click', resetZoom);
+
+  img.addEventListener('dblclick', function () { setZoom(zoom > 1 ? 1 : 2); });
+
+  stage.addEventListener('wheel', function (e) {
+    if (img.hidden) return;
+    e.preventDefault();
+    setZoom(zoom + (e.deltaY < 0 ? 0.25 : -0.25));
+  }, { passive: false });
+
+  /* Pointer-based drag-to-pan, plus basic two-finger pinch-to-zoom. */
+  var pointers = {};
+  var dragging = false, dragStart = { x: 0, y: 0, panX: 0, panY: 0 };
+  var pinchStartDist = 0, pinchStartZoom = 1;
+
+  function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+  stage.addEventListener('pointerdown', function (e) {
+    if (img.hidden) return;
+    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    var ids = Object.keys(pointers);
+    if (ids.length === 1 && zoom > 1) {
+      dragging = true;
+      dragStart = { x: e.clientX, y: e.clientY, panX: panX, panY: panY };
+      img.style.cursor = 'grabbing';
+      stage.setPointerCapture(e.pointerId);
+    } else if (ids.length === 2) {
+      dragging = false;
+      var pts = ids.map(function (id) { return pointers[id]; });
+      pinchStartDist = dist(pts[0], pts[1]);
+      pinchStartZoom = zoom;
+    }
+  });
+
+  stage.addEventListener('pointermove', function (e) {
+    if (!(e.pointerId in pointers)) return;
+    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    var ids = Object.keys(pointers);
+    if (ids.length === 2) {
+      var pts = ids.map(function (id) { return pointers[id]; });
+      var d = dist(pts[0], pts[1]);
+      if (pinchStartDist > 0) setZoom(pinchStartZoom * (d / pinchStartDist));
+    } else if (dragging) {
+      panX = dragStart.panX + (e.clientX - dragStart.x);
+      panY = dragStart.panY + (e.clientY - dragStart.y);
+      applyTransform();
+    }
+  });
+
+  function endPointer(e) {
+    delete pointers[e.pointerId];
+    if (Object.keys(pointers).length < 2) pinchStartDist = 0;
+    if (Object.keys(pointers).length === 0) { dragging = false; if (zoom > 1) img.style.cursor = 'grab'; }
+  }
+  stage.addEventListener('pointerup', endPointer);
+  stage.addEventListener('pointercancel', endPointer);
+  stage.addEventListener('pointerleave', function (e) { if (dragging) endPointer(e); });
+
+  dialog.addEventListener('keydown', function (e) {
+    if (img.hidden || zoom <= 1) return;
+    var step = 20;
+    if (e.key === 'ArrowLeft') { panX += step; applyTransform(); e.preventDefault(); }
+    else if (e.key === 'ArrowRight') { panX -= step; applyTransform(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { panY += step; applyTransform(); e.preventDefault(); }
+    else if (e.key === 'ArrowDown') { panY -= step; applyTransform(); e.preventDefault(); }
+  });
+})();
+</script>
