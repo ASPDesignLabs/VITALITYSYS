@@ -9,12 +9,19 @@
      happening. This tag is the fix; the visualViewport JS below only
      works correctly once this is in place. -->
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VITALITY.SYS</title>
+<title>VITALITY.SYS — vitals, not checklists</title>
 <meta name="description" content="A phone + Wear OS system that tracks meals, hydration, medication, and hygiene as a single HP number instead of a checklist — fully offline, GPL-3.0.">
+<link rel="canonical" href="https://aspdesignlabs.github.io/VITALITYSYS/">
+<meta name="theme-color" content="#050505">
 
-<!-- Open Graph / Twitter card. Image is a pending asset slot (see assets/README.md) —
-     tags are wired to the final path now so nothing else needs editing once
-     assets/social/og-card.png is dropped in and pushed. -->
+<link rel="icon" type="image/png" sizes="512x512" href="assets/icons/icon-512.png">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
+
+<!-- Open Graph / Twitter card -- assets/social/og-card.png, built from the
+     same design tokens/brand mark as the page itself (see
+     assets/social/og-card.source.html to regenerate it). -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="VITALITY.SYS">
 <meta property="og:url" content="https://aspdesignlabs.github.io/VITALITYSYS/">
@@ -29,6 +36,35 @@
 <meta name="twitter:description" content="A phone + Wear OS system that tracks meals, hydration, medication, and hygiene as a single HP number instead of a checklist — fully offline, GPL-3.0.">
 <meta name="twitter:image" content="https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.png">
 <meta name="twitter:image:alt" content="VITALITY.SYS logo — a neon pink EKG trace on a black grid — beside the text VITALITY.SYS.">
+
+<!-- Structured data for search engines (Google rich results etc.) --
+     SoftwareApplication is the closest schema.org type to "a self-hosted
+     Android app pair," and every field here is one already stated above
+     or in the app itself, not invented for SEO's sake. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "VITALITY.SYS",
+  "description": "A phone + Wear OS system that tracks meals, hydration, medication, and hygiene as a single HP number instead of a checklist — fully offline, GPL-3.0.",
+  "url": "https://aspdesignlabs.github.io/VITALITYSYS/",
+  "image": "https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.png",
+  "applicationCategory": "HealthApplication",
+  "operatingSystem": "Android, Wear OS",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+  "author": {
+    "@type": "Person",
+    "name": "ASPDesignLabs"
+  },
+  "downloadUrl": "https://github.com/ASPDesignLabs/VITALITYSYS/releases",
+  "codeRepository": "https://github.com/ASPDesignLabs/VITALITYSYS"
+}
+</script>
 
 <noscript><style>.reveal-panel[hidden] { display: block !important; }</style></noscript>
 
@@ -996,6 +1032,7 @@
         <a href="#deck-watch">06 Watch App</a>
         <a href="#deck-privacy">07 Privacy &amp; Offline</a>
         <a href="#deck-about">08 About / Source</a>
+        <a href="#deck-downloads">09 Downloads</a>
       </div>
     </details>
   </div>
@@ -1448,18 +1485,65 @@
 
           <h3>Get it</h3>
           <p>
-            There's no Play Store listing. Build it yourself from source with
-            Gradle, or watch the repo's Releases page for prebuilt APKs.
+            There's no Play Store listing — GitHub is the only distribution
+            channel. See the <a href="#deck-downloads">Downloads</a> deck for
+            release and build-from-source links.
           </p>
           <div class="about-links">
             <a class="btn cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS">Source on GitHub</a>
-            <a class="btn btn-ghost cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS/releases">Releases</a>
             <a class="btn btn-ghost cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS/blob/main/LICENSE">GPL-3.0 License</a>
           </div>
           <p style="text-align:center;font-size:0.75rem;color:var(--text-faint);">
             VITALITY.SYS is free software, licensed GPL-3.0. No warranty,
             personal project, built by one person for their own use.
           </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="deck-downloads" class="deck">
+    <p class="deck-eyebrow">Deck 09 // Downloads</p>
+    <div class="phone-frame">
+      <div class="phone-notch" aria-hidden="true"></div>
+      <div class="phone-screen">
+        <h2 class="dash-header-title" style="font-size:0.95rem;">DEPLOYMENT // ACQUIRE_BUILD</h2>
+        <p class="dash-header-sub">NO PLAY STORE LISTING — GITHUB IS THE ONLY CHANNEL</p>
+
+        <div class="sys-notice">
+          <strong>Status:</strong> release APKs are in progress. Until
+          they're published to GitHub Releases, build from source with
+          Gradle below.
+        </div>
+
+        <div class="deck-copy">
+          <h3>VITALITYMOBILE — phone app</h3>
+          <p>
+            Full dashboard, schedule editor, Health Connect bridge,
+            pain/symptom logging, and PDF report export. Package
+            <code>com.snakesan.vitalitysys</code>.
+          </p>
+
+          <h3>VITALITYDECK — Wear OS app</h3>
+          <p>
+            Standalone watch app — keeps working even if the phone is out
+            of range. Rotary-bezel or edge-tap navigation between five
+            decks. Package <code>com.snakesan.vitalitysys</code> (Wear
+            module).
+          </p>
+
+          <h3>Requirements</h3>
+          <p>
+            An Android phone, plus a paired Wear OS watch for the full
+            experience — the phone app also runs standalone. GPL-3.0, no
+            internet permission requested by either module; see
+            <a href="#deck-privacy">Privacy &amp; Offline</a>.
+          </p>
+
+          <div class="about-links">
+            <a class="btn cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS/releases">View Releases</a>
+            <a class="btn btn-ghost cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS">Build from Source</a>
+          </div>
         </div>
       </div>
     </div>

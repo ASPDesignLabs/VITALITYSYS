@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VITALITY.SYS — OG card source</title>
+<!--
+  Source for assets/social/og-card.png (1200x630, the standard Open Graph /
+  Twitter card size). Not part of the site itself -- open this file and
+  screenshot the #card element at 1200x630 to regenerate the PNG after
+  editing. Uses the same design tokens as index.html (kept in sync by hand;
+  there are only two files, a build step would be overkill).
+-->
+<style>
+  :root {
+    --void: #050505;
+    --border: #2a2a2a;
+    --text: #e8e8e8;
+    --text-dim: #a8a8a8;
+    --text-faint: #808080;
+    --cyan: #00f3ff;
+    --pink: #ff0055;
+    --font-display: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+  }
+  html, body { margin: 0; padding: 0; background: #202020; }
+  #card {
+    width: 1200px;
+    height: 630px;
+    position: relative;
+    overflow: hidden;
+    background:
+      linear-gradient(var(--border) 1px, transparent 1px) 0 0 / 48px 48px,
+      linear-gradient(90deg, var(--border) 1px, transparent 1px) 0 0 / 48px 48px,
+      var(--void);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+  }
+  /* Cut-corner frame, same motif as .cut-panel in index.html (VitalityShape). */
+  #frame {
+    position: absolute;
+    inset: 28px;
+    border: 2px solid var(--border);
+    clip-path: polygon(24px 0, 100% 0, 100% calc(100% - 24px), calc(100% - 24px) 100%, 0 100%, 0 24px);
+  }
+  #frame::before {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border: 2px solid var(--cyan);
+    opacity: 0.35;
+    clip-path: polygon(24px 0, 100% 0, 100% calc(100% - 24px), calc(100% - 24px) 100%, 0 100%, 0 24px);
+    pointer-events: none;
+  }
+  #content {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 56px;
+    padding: 0 80px;
+  }
+  #icon {
+    width: 220px;
+    height: 220px;
+    flex: none;
+    filter: drop-shadow(0 0 40px rgba(255, 0, 85, 0.35));
+  }
+  #text { text-align: left; }
+  #wordmark {
+    font-size: 68px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--cyan);
+    margin: 0;
+    line-height: 1;
+  }
+  #wordmark .dot { color: var(--pink); }
+  #sub {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    margin: 14px 0 0;
+  }
+  #tagline {
+    font-family: var(--font-body, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
+    font-size: 30px;
+    color: var(--text);
+    margin: 36px 0 0;
+    max-width: 620px;
+  }
+  #footer {
+    font-size: 18px;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+    margin: 28px 0 0;
+  }
+  #footer .sep { color: var(--text-faint); margin: 0 10px; }
+</style>
+</head>
+<body>
+  <div id="card">
+    <div id="frame"></div>
+    <div id="content">
+      <img id="icon" src="../../VITALITYMOBILE/src/main/ic_launcher-playstore.png" alt="">
+      <div id="text">
+        <p id="wordmark">VITALITY<span class="dot">.</span>SYS</p>
+        <p id="sub">Clinical Controller</p>
+        <p id="tagline">Vitals, not checklists.</p>
+        <p id="footer">Phone<span class="sep">+</span>Wear OS<span class="sep">·</span>Offline<span class="sep">·</span>GPL-3.0</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
