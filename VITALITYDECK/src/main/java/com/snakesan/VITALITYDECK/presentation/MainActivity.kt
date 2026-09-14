@@ -96,6 +96,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         WorkManager.getInstance(this).enqueueUniquePeriodicWork("VitalitySentinel", ExistingPeriodicWorkPolicy.KEEP, workRequest)
         
         flushPainLogs()
+        flushPendingTelemetry()
         // Signal Watch Face on startup to ensure sync
         broadcastToOverseerLocal()
 
@@ -134,11 +135,12 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         config = store.getConfig()
     }
 
-    override fun onResume() { 
+    override fun onResume() {
         super.onResume()
         store.checkDailyReset()
         loadState()
         flushPainLogs()
+        flushPendingTelemetry()
         broadcastToOverseerLocal()
     }
 
@@ -286,11 +288,42 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         }
         store.setLastTime(protocol, now)
 
-        // broadcastToOverseerLocal() already ends with pushStateToDataLayer()
+        // broadcastToOverseerLocal() already ends with pushStateToDataLayer(),
+        // which is what actually carries the authoritative counts/
+        // completedKeys to the phone.
         broadcastToOverseerLocal()
 
-        val event = TelemetryEvent(protocol.id, now, itemKey)
-        Wearable.getNodeClient(this).connectedNodes.addOnSuccessListener { nodes -> nodes.forEach { Wearable.getMessageClient(this).sendMessage(it.id, "/sys/telemetry", event.toBytes()) } }
+        // Telemetry separately tells the phone *that this specific action
+        // happened* — closing out its audit/notification trail and
+        // reconciling any in-flight overlay for the same item — so it's
+        // queued like pending pain logs rather than fired-and-forgotten:
+        // a momentary disconnect right when this button is tapped must not
+        // silently drop a real response and leave the phone thinking it was
+        // ignored.
+        store.addPendingTelemetry(protocol.id, itemKey, now)
+        flushPendingTelemetry()
+    }
+
+    private fun flushPendingTelemetry() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val pending = store.getPendingTelemetry()
+            if (pending.isEmpty()) return@launch
+            try {
+                val nodes = Tasks.await(Wearable.getNodeClient(this@MainActivity).connectedNodes)
+                if (nodes.isEmpty()) return@launch
+                pending.forEach { (protocolId, itemKey, timestamp) ->
+                    val event = TelemetryEvent(protocolId, timestamp, itemKey)
+                    nodes.forEach { node ->
+                        Tasks.await(Wearable.getMessageClient(this@MainActivity).sendMessage(node.id, "/sys/telemetry", event.toBytes()))
+                        delay(50)
+                    }
+                    // Only drop this one entry once every node has it — same
+                    // reasoning as flushPainLogs: a failure partway through
+                    // just leaves the rest queued for the next flush.
+                    store.removePendingTelemetry(protocolId, itemKey, timestamp)
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
     }
 
     // forceRunSentinel() moved to debug/DebugTools.kt, gated behind DebugFlags.

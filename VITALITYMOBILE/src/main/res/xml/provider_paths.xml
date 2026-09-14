@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path name="shared_files" path="." />
+    <!-- Interrupt-capture camera photos: persistent (not cache) so a photo
+         taken minutes or hours ago is still there if the user resumes the
+         interrupt later off the sticky in-progress notification. -->
+    <files-path name="interrupt_photos" path="interrupt_photos/" />
 </paths>

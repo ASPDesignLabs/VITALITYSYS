@@ -28,7 +28,13 @@ data class SysConfig(
     val hydrationTargetMl: Float,
     val activeStartHour: Float,
     val activeEndHour: Float,
-    val clinicalOverride: Float = 0f
+    val clinicalOverride: Float = 0f,
+    // How hard it is to back out of an in-flight interrupt without
+    // completing it (see EscapeDifficulty). Phone-only concern — the watch
+    // has no capture UI to escape from, but this rides along in the same
+    // config JSON, so an unrecognized/missing value just falls back to
+    // STANDARD there and everywhere else.
+    val escapeDifficulty: Int = EscapeDifficulty.STANDARD.id
 ) {
     fun allDoses(): List<Dose> = medications.flatMap { med ->
         med.times.mapIndexed { index, time ->
@@ -98,7 +104,8 @@ data class SysConfig(
                 hydrationTargetMl = json.optDouble("hydrationTargetMl", DEFAULT.hydrationTargetMl.toDouble()).toFloat(),
                 activeStartHour = json.optDouble("activeStartHour", DEFAULT.activeStartHour.toDouble()).toFloat(),
                 activeEndHour = json.optDouble("activeEndHour", DEFAULT.activeEndHour.toDouble()).toFloat(),
-                clinicalOverride = json.optDouble("clinicalOverride", 0.0).toFloat()
+                clinicalOverride = json.optDouble("clinicalOverride", 0.0).toFloat(),
+                escapeDifficulty = json.optInt("escapeDifficulty", EscapeDifficulty.STANDARD.id)
             )
         }
     }
@@ -124,6 +131,7 @@ data class SysConfig(
         json.put("activeStartHour", activeStartHour.toDouble())
         json.put("activeEndHour", activeEndHour.toDouble())
         json.put("clinicalOverride", clinicalOverride.toDouble())
+        json.put("escapeDifficulty", escapeDifficulty)
         return json
     }
 

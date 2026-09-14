@@ -1,7 +1,10 @@
 package com.snakesan.vitalitysys
 
 import android.content.Intent
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -14,10 +17,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -30,6 +38,7 @@ import com.snakesan.vitalitysys.debug.DebugFlags
 import com.snakesan.vitalitysys.debug.DebugPanel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -44,6 +53,29 @@ fun VitalityOrchestrator(activity: MainActivity) {
 
     // NEW: Fetch Audit Trail
     val audits by activity.db.systemDao().getRecentAudits().collectAsState(initial = emptyList())
+
+    val haptic = LocalHapticFeedback.current
+    var showAbandonConfirm by remember { mutableStateOf(false) }
+
+    // Whether backing out right now would abandon an in-flight interrupt at
+    // all — INTERRUPT_RESTORE is excluded because the protocol is already
+    // fulfilled by that point, so there's nothing left an escape could skip.
+    val canEscape = activity.appMode == AppMode.INTERRUPT_CAPTURE ||
+        activity.appMode == AppMode.INTERRUPT_ACTION ||
+        activity.appMode == AppMode.NUTRITION_CAPTURE
+
+    // Configurable per EscapeDifficulty (see the FOCUS settings card):
+    // EASY exits right away, STANDARD confirms first, FIRM blocks entirely.
+    // This is deliberately independent of the sticky in-progress
+    // notification, which never clears from an escape — only from actually
+    // finishing the protocol.
+    BackHandler(enabled = canEscape) {
+        when (activity.escapeDifficulty) {
+            EscapeDifficulty.EASY -> activity.abandonInterruption()
+            EscapeDifficulty.STANDARD -> showAbandonConfirm = true
+            EscapeDifficulty.FIRM -> haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(NeonBg)) {
         VitalityDashboard(activity, logs, audits)
@@ -62,10 +94,15 @@ fun VitalityOrchestrator(activity: MainActivity) {
                                 sugar.toDouble()
                             )
                         }
-                        // 2. Fulfill protocol logic
+                        // 2. Fulfill protocol logic — skip the count bump if
+                        // the watch already logged (and counted) this meal
+                        // locally; we're only here for its macro detail.
                         activity.fulfillProtocolAudit(Protocol.NUTRIENT.id)
-                        activity.nutrientCount++
-                        activity.persistState()
+                        if (!activity.nutrientLoggedViaWatch) {
+                            activity.nutrientCount++
+                            activity.persistState()
+                        }
+                        activity.nutrientLoggedViaWatch = false
                         activity.userContext = "OPTIMIZED NUTRITION VECTOR"
                         activity.appMode = AppMode.INTERRUPT_RESTORE
                     }
@@ -74,6 +111,61 @@ fun VitalityOrchestrator(activity: MainActivity) {
                 InterruptionOverlay(activity)
             }
         }
+
+        if (showAbandonConfirm) {
+            AbandonConfirmDialog(
+                onConfirm = { showAbandonConfirm = false; activity.abandonInterruption() },
+                onDismiss = { showAbandonConfirm = false }
+            )
+        }
+    }
+}
+
+@Composable
+fun AbandonConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Graphite,
+        title = { Text("SKIP THIS INTERRUPT?", color = NeonPink, fontWeight = FontWeight.Bold) },
+        text = {
+            Text(
+                "This gets logged as skipped. The reminder for it stays up regardless — it only clears once you actually complete it.",
+                color = Color.White, fontSize = 13.sp
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("SKIP FOR NOW", color = NeonPink, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("KEEP GOING", color = NeonCyan) }
+        }
+    )
+}
+
+// Decodes and displays a captured interrupt photo. Kept deliberately simple
+// (no caching/downsampling library) since these are small phone-camera
+// preview-scale reads of a handful of images, not a gallery.
+@Composable
+fun PhotoThumbnail(uri: Uri, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var bitmap by remember(uri) { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(uri) {
+        bitmap = withContext(Dispatchers.IO) {
+            try {
+                context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+                    ?.asImageBitmap()
+            } catch (e: Exception) { null }
+        }
+    }
+
+    bitmap?.let {
+        Image(
+            bitmap = it,
+            contentDescription = "Captured photo",
+            contentScale = ContentScale.Crop,
+            modifier = modifier.clip(VitalityShape).border(1.dp, NeonCyan, VitalityShape)
+        )
     }
 }
 
@@ -111,6 +203,7 @@ fun InterruptionOverlay(activity: MainActivity) {
                 Spacer(Modifier.height(30.dp))
 
                 var text by remember { mutableStateOf("") }
+                val photoUri = activity.userContextPhotoUri
 
                 BasicTextField(
                     value = text,
@@ -120,14 +213,37 @@ fun InterruptionOverlay(activity: MainActivity) {
                     modifier = Modifier.fillMaxWidth().border(1.dp, NeonCyan, VitalityShape).padding(20.dp)
                 )
 
+                Spacer(Modifier.height(16.dp))
+
+                // Alternative/companion input: a photo instead of (or
+                // alongside) typing it out — a snapshot of whatever you were
+                // doing can say more than a rushed sentence.
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SmallActionButton(if (photoUri == null) "ATTACH PHOTO" else "RETAKE PHOTO", NeonCyan) {
+                        activity.capturePhoto()
+                    }
+                    if (photoUri != null) {
+                        SmallActionButton("REMOVE PHOTO", NeonPink) { activity.userContextPhotoUri = null }
+                    }
+                }
+                photoUri?.let {
+                    Spacer(Modifier.height(12.dp))
+                    PhotoThumbnail(it, modifier = Modifier.size(120.dp))
+                }
+
                 Spacer(Modifier.height(30.dp))
 
                 CyberButtonBlock(if (isPainEvent) "LOG DATA & RESUME" else "LOCK VECTOR") {
                     if (isPainEvent) {
-                        activity.commitPainLog(text.ifEmpty { "No details provided" })
+                        val note = text.ifEmpty { "No details provided" } + if (photoUri != null) " [+photo]" else ""
+                        activity.commitPainLog(note)
                     } else {
-                        activity.userContext = text.ifEmpty { "UNKNOWN TASK" }
+                        activity.userContext = text.ifEmpty { if (photoUri != null) "PHOTO ATTACHED" else "UNKNOWN TASK" }
                         activity.appMode = AppMode.INTERRUPT_ACTION
+                        StickyStatusNotifier.notifyInProgress(
+                            activity, activity.activeProtocol!!, activity.pendingItemKey,
+                            activity.userContext, "ACTION", photoUri?.toString()
+                        )
                     }
                 }
             }
@@ -138,6 +254,10 @@ fun InterruptionOverlay(activity: MainActivity) {
                 val color = Color(protocol.colorHex)
                 Text("VECTOR LOCKED", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 Text(activity.userContext.uppercase(), color = Color.White, fontSize = 14.sp)
+                activity.userContextPhotoUri?.let {
+                    Spacer(Modifier.height(12.dp))
+                    PhotoThumbnail(it, modifier = Modifier.size(90.dp))
+                }
                 Spacer(Modifier.height(60.dp))
                 Text("EXECUTE PROTOCOL", color = color, fontSize = 12.sp, letterSpacing = 2.sp)
                 Text(protocol.label, color = color, fontSize = 40.sp, fontWeight = FontWeight.Black)
@@ -165,14 +285,30 @@ fun InterruptionOverlay(activity: MainActivity) {
             // --- PHASE 3: RESTORE VECTOR ---
             if (activity.appMode == AppMode.INTERRUPT_RESTORE) {
                 Text("SYSTEM OPTIMIZED", color = NeonGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                if (activity.completedViaWatch) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "✓ LOGGED VIA WATCH", color = NeonCyan, fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold, letterSpacing = 1.sp
+                    )
+                }
                 Spacer(Modifier.height(40.dp))
                 Text("RESUMING VECTOR:", color = Color.Gray, fontSize = 12.sp)
-                Text(activity.userContext.uppercase(), color = NeonCyan, fontSize = 28.sp, fontWeight = FontWeight.Black)
+                Text(
+                    activity.userContext.ifBlank { "YOUR PREVIOUS TASK" }.uppercase(),
+                    color = NeonCyan, fontSize = 28.sp, fontWeight = FontWeight.Black
+                )
+                activity.userContextPhotoUri?.let {
+                    Spacer(Modifier.height(20.dp))
+                    PhotoThumbnail(it, modifier = Modifier.size(140.dp))
+                }
                 Spacer(Modifier.height(60.dp))
                 CyberButtonBlock("ENGAGE") {
                     activity.appMode = AppMode.DASHBOARD
                     activity.activeProtocol = null
                     activity.userContext = ""
+                    activity.userContextPhotoUri = null
+                    activity.completedViaWatch = false
                 }
             }
         }
@@ -241,7 +377,7 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
 
         LaunchedEffect(
             activity.mealTimes.toList(), activity.medications.toList(), activity.hygieneTasks.toList(),
-            activity.hydrationTarget, activity.activeStart, activity.activeEnd
+            activity.hydrationTarget, activity.activeStart, activity.activeEnd, activity.escapeDifficulty
         ) {
             kotlinx.coroutines.delay(1000)
             activity.saveAndPushConfig()
@@ -385,6 +521,8 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
             }
         }
 
+        FocusSettingsModule(activity)
+
         Spacer(Modifier.weight(1f))
 
         ComplianceAuditModule(audits)
@@ -393,6 +531,69 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
         }
 
         Spacer(Modifier.height(20.dp))
+    }
+}
+
+// --- FOCUS SETTINGS MODULE ---
+// Lets someone deliberately steer their own behavior: EASY makes this tool
+// stay out of the way (a pure reminder), FIRM makes it genuinely hard to
+// skip an interrupt without doing the thing. Independent of the sticky
+// in-progress notification, which never clears just because you escaped —
+// only completing the protocol clears that.
+@Composable
+fun FocusSettingsModule(activity: MainActivity) {
+    var isRevealed by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .clip(CutCornerShape(bottomEnd = 12.dp))
+                .background(if (isRevealed) NeonCyan.copy(alpha = 0.2f) else Color.DarkGray.copy(alpha = 0.3f))
+                .clickable { isRevealed = !isRevealed }
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Text(
+                text = "FOCUS // ESCAPE: ${activity.escapeDifficulty.label}",
+                color = if (isRevealed) NeonCyan else Color.Gray,
+                fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp
+            )
+        }
+
+        AnimatedVisibility(visible = isRevealed) {
+            Column(modifier = Modifier.fillMaxWidth().background(Color(0xFF0A0A0A)).padding(16.dp)) {
+                ConfigLabel("HOW HARD TO ESCAPE AN INTERRUPT")
+                Text(
+                    "Controls backing out of a capture/action screen without finishing it.",
+                    color = Color.Gray, fontSize = 10.sp, lineHeight = 14.sp
+                )
+                Spacer(Modifier.height(12.dp))
+                EscapeDifficulty.values().forEach { option ->
+                    val selected = activity.escapeDifficulty == option
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .clip(VitalityShape)
+                            .background(if (selected) NeonCyan.copy(alpha = 0.12f) else Color.Transparent)
+                            .border(1.dp, if (selected) NeonCyan else Color.DarkGray, VitalityShape)
+                            .clickable { activity.escapeDifficulty = option }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                option.label, color = if (selected) NeonCyan else Color.White,
+                                fontSize = 12.sp, fontWeight = FontWeight.Bold
+                            )
+                            Text(option.description, color = Color.Gray, fontSize = 9.sp)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

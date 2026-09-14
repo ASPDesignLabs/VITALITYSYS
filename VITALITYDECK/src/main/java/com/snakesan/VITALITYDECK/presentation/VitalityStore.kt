@@ -84,6 +84,50 @@ class VitalityStore(context: Context) {
         prefs.edit().putString("pending_pain", newString).apply()
     }
 
+    // --- PENDING TELEMETRY (Offline Queue) ---
+    // Mirrors the pending-pain-log queue above: a watch-side completion
+    // (tapping "LOG ENTRY"/"ALL CLEAR") must still reach the phone even if
+    // the watch happens to be briefly disconnected right when it's tapped,
+    // or the phone's audit trail will wrongly flag a real response as
+    // ignored once its 5-minute check fires. itemKey can itself contain ":"
+    // (see SysConfig.doseKey), so it's reconstructed from everything between
+    // the first and last ":" rather than a fixed split index.
+    fun addPendingTelemetry(protocolId: Int, itemKey: String, timestamp: Long) {
+        val currentString = prefs.getString("pending_telemetry", "") ?: ""
+        val entry = "$protocolId:$itemKey:$timestamp"
+        val newString = if (currentString.isEmpty()) entry else "$currentString|$entry"
+        prefs.edit().putString("pending_telemetry", newString).apply()
+    }
+
+    fun getPendingTelemetry(): List<Triple<Int, String, Long>> {
+        val raw = prefs.getString("pending_telemetry", "") ?: return emptyList()
+        if (raw.isEmpty()) return emptyList()
+
+        return raw.split("|").mapNotNull { entry ->
+            val parts = entry.split(":")
+            // Always at least 3: protocolId, itemKey (possibly empty, but
+            // still bounded by its own ":"s), timestamp.
+            if (parts.size < 3) return@mapNotNull null
+            try {
+                val protocolId = parts.first().toInt()
+                val timestamp = parts.last().toLong()
+                val itemKey = parts.subList(1, parts.size - 1).joinToString(":")
+                Triple(protocolId, itemKey, timestamp)
+            } catch (e: NumberFormatException) { null }
+        }
+    }
+
+    // Drops a single delivered entry rather than the whole queue, so a flush
+    // that fails partway through doesn't resend telemetry that already made
+    // it across (see MainActivity.flushPendingTelemetry).
+    fun removePendingTelemetry(protocolId: Int, itemKey: String, timestamp: Long) {
+        val remaining = getPendingTelemetry().filterNot {
+            it.first == protocolId && it.second == itemKey && it.third == timestamp
+        }
+        val newString = remaining.joinToString("|") { "${it.first}:${it.second}:${it.third}" }
+        prefs.edit().putString("pending_telemetry", newString).apply()
+    }
+
     // --- CONFIGURATION ---
 
     fun saveConfig(c: SysConfig) {
