@@ -376,6 +376,20 @@ fun ComplianceAuditModule(audits: List<NotificationAudit>) {
             .sortedBy { it.first }
     }
 
+    // Collapsed-header stats: today's grade plus a rolling 7-day average,
+    // so the indicator is meaningful at a glance without expanding it.
+    val todayGrade = remember(audits) {
+        val todayStart = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        VitalityMath.calculateComplianceScore(audits.filter { it.timestampIssued >= todayStart })
+    }
+    val sevenDayGrade = remember(audits) {
+        val sevenDaysAgo = System.currentTimeMillis() - (7L * 86400000L)
+        VitalityMath.calculateComplianceScore(audits.filter { it.timestampIssued >= sevenDaysAgo })
+    }
+
     fun gradeColor(grade: String): Color = when (grade) {
         "A" -> NeonGreen
         "B" -> NeonCyan
@@ -401,16 +415,27 @@ fun ComplianceAuditModule(audits: List<NotificationAudit>) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (isRevealed) "COMPLIANCE // ACCESSING_ARCHIVE" else "COMPLIANCE // TAP_TO_DECRYPT",
+                    text = "COMPLIANCE",
                     color = if (isRevealed) NeonPink else Color.Gray,
                     fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp
                 )
-                if (overall.totalAlerts > 0) {
-                    Text(
-                        text = "${overall.grade} // ${overall.compliancePercentage}%",
-                        color = gradeColor(overall.grade),
-                        fontSize = 12.sp, fontWeight = FontWeight.Black
-                    )
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("TODAY", color = Color.Gray, fontSize = 7.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+                        Text(
+                            text = if (todayGrade.totalAlerts > 0) "${todayGrade.grade} ${todayGrade.compliancePercentage}%" else "—",
+                            color = if (todayGrade.totalAlerts > 0) gradeColor(todayGrade.grade) else Color.DarkGray,
+                            fontSize = 11.sp, fontWeight = FontWeight.Black
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("7D AVG", color = Color.Gray, fontSize = 7.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+                        Text(
+                            text = if (sevenDayGrade.totalAlerts > 0) "${sevenDayGrade.grade} ${sevenDayGrade.compliancePercentage}%" else "—",
+                            color = if (sevenDayGrade.totalAlerts > 0) gradeColor(sevenDayGrade.grade) else Color.DarkGray,
+                            fontSize = 11.sp, fontWeight = FontWeight.Black
+                        )
+                    }
                 }
             }
         }
