@@ -637,6 +637,102 @@
   .watch-dots { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 4px; }
   .watch-dots span { width: 4px; height: 4px; background: var(--border); display: block; }
   .watch-dots span.active { width: 5px; height: 5px; background: var(--cyan); }
+  .watch-pain-desc { font-family: var(--font-display); color: var(--text-faint); font-size: 0.5rem; font-weight: 700; margin-top: 2px; }
+  .watch-caption {
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    max-width: 46ch;
+    margin: 0.75rem auto 0;
+  }
+  .deck-copy { text-align: left; color: var(--text-dim); font-size: 0.85rem; max-width: 46ch; margin: 1.25rem auto 0; }
+  .deck-copy p { margin: 0 0 0.85rem; }
+
+  /* --- Interrupt Capture: a fieldset of radio "phase tabs" (native,
+     no JS) stepping through the app's own InterruptionOverlay phases. --- */
+  .phase-fieldset { border: 0; margin: 1rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+  .phase-radio { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .phase-tab {
+    flex: 1;
+    text-align: center;
+    padding: 8px 4px;
+    font-family: var(--font-display);
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+    background: var(--graphite);
+    border: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .phase-radio:checked + .phase-tab { color: var(--void); background: var(--cyan); border-color: var(--cyan); }
+  .phase-radio:focus-visible + .phase-tab { outline: 3px solid var(--green); outline-offset: 2px; }
+  .phase-panel {
+    display: none;
+    flex-basis: 100%;
+    text-align: center;
+    padding: 20px 14px;
+    background: var(--graphite-2);
+    margin-top: 8px;
+    min-height: 150px;
+  }
+  #phase1:checked ~ [data-phase="1"] { display: block; }
+  #phase2:checked ~ [data-phase="2"] { display: block; }
+  #phase3:checked ~ [data-phase="3"] { display: block; }
+  .phase-kicker { font-family: var(--font-display); font-size: 0.65rem; font-weight: 700; letter-spacing: 0.1em; margin: 0 0 0.75rem; color: var(--text-faint); }
+  .phase-title { font-family: var(--font-display); font-weight: 800; margin: 0 0 0.5rem; }
+  .phase-hint { color: var(--text-faint); font-size: 0.75rem; margin: 0 0 1rem; }
+  .phase-input {
+    text-align: left;
+    color: var(--cyan);
+    font-family: var(--font-display);
+    font-weight: 700;
+    border: 1px solid var(--cyan);
+    padding: 10px;
+    margin-bottom: 1rem;
+  }
+  .phase-btn { display: inline-block; }
+
+  /* --- Reports & Audits: static demo of the export controls --- */
+  .export-demo { margin-top: 12px; text-align: left; }
+  .export-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .export-toggle {
+    width: 34px; height: 18px; border: 1px solid var(--cyan);
+    background: rgba(0,243,255,0.12); position: relative; flex: none;
+  }
+  .export-toggle::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; background: var(--cyan);
+  }
+  .export-label { font-family: var(--font-display); font-size: 0.7rem; font-weight: 700; color: var(--cyan); }
+  .export-range {
+    display: flex; justify-content: space-between; border: 1px solid var(--text-faint);
+    padding: 8px 10px; font-family: var(--font-display); font-size: 0.65rem;
+  }
+  .export-range span:first-child { color: var(--text-faint); }
+  .export-range span:last-child { color: var(--cyan); font-weight: 700; }
+  .pdf-btn {
+    display: block; text-align: center; margin-top: 10px; padding: 10px;
+    font-family: var(--font-display); font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em;
+    color: var(--cyan); background: rgba(0,243,255,0.12); border: 2px solid var(--cyan);
+  }
+
+  /* --- Privacy: the app's own PrivacyRationaleActivity screen --- */
+  .privacy-quote {
+    text-align: left;
+    margin: 1rem 0;
+    padding: 1rem;
+    border-left: 3px solid var(--pink);
+    background: var(--graphite-2);
+    color: var(--text);
+    font-size: 0.85rem;
+  }
+  .privacy-quote cite { display: block; margin-top: 0.6rem; font-family: var(--font-display); font-size: 0.65rem; color: var(--text-faint); font-style: normal; }
+
+  /* --- About / Source --- */
+  .about-links { display: flex; flex-direction: column; gap: 0.6rem; margin: 1rem 0; }
+  .about-links .btn { text-align: center; }
+  .deck-copy h3 { font-family: var(--font-display); color: var(--text); font-size: 0.85rem; margin: 1.25rem 0 0.5rem; }
+  .deck-copy h3:first-child { margin-top: 0; }
 </style>
 
 <a class="skip-link" href="#main">Skip to main content</a>
@@ -654,6 +750,12 @@
       <div class="deck-select-menu">
         <a href="#deck-dashboard">01 Dashboard</a>
         <a href="#deck-protocols">02 Protocols</a>
+        <a href="#deck-interrupt">03 Interrupt Capture</a>
+        <a href="#deck-pain">04 Pain Logging</a>
+        <a href="#deck-reports">05 Reports &amp; Audits</a>
+        <a href="#deck-watch">06 Watch App</a>
+        <a href="#deck-privacy">07 Privacy &amp; Offline</a>
+        <a href="#deck-about">08 About / Source</a>
       </div>
     </details>
   </div>
@@ -670,7 +772,7 @@
         <div class="sys-notice">
           <strong>Status:</strong> actively-developed personal accessibility
           project, built and dogfooded by one person. Not distributed on the
-          Play Store — build it from source (see About / Source, further down).
+          Play Store — build it from source (see <a href="#deck-about">About / Source</a>).
         </div>
 
         <h1 class="dash-header-title">VITALITY<span class="dot" aria-hidden="true">.</span>SYS</h1>
@@ -741,8 +843,8 @@
           </ul>
           <p>
             The number is shared live between your phone and your watch over
-            Bluetooth (no server involved — see Privacy &amp; Offline, further
-            down), so the watch isn't a passive mirror of the phone. It's
+            Bluetooth (no server involved — see
+            <a href="#deck-privacy">Privacy &amp; offline</a>), so the watch isn't a passive mirror of the phone. It's
             built to be the thing you actually glance at and act on, with the
             phone as the fuller dashboard and configuration surface.
           </p>
@@ -858,9 +960,251 @@
     </div>
   </section>
 
-  <!-- Decks 03-08 (Interrupt Capture, Pain Logging, Reports & Audits,
-       Watch App, Privacy & Offline, About / Source) are next -- holding
-       off until the pattern above is confirmed. -->
+  <section id="deck-interrupt" class="deck">
+    <p class="deck-eyebrow">Deck 03</p>
+    <div class="phone-frame">
+      <div class="phone-notch" aria-hidden="true"></div>
+      <div class="phone-screen">
+        <h2 class="dash-header-title" style="font-size:1rem;">INTERRUPT CAPTURE</h2>
+        <p class="dash-header-sub">A PROTOCOL COMES DUE</p>
+
+        <fieldset class="phase-fieldset">
+          <legend class="visually-hidden">Step through the three interrupt-capture phases</legend>
+
+          <input type="radio" name="interrupt-phase" id="phase1" class="phase-radio" checked>
+          <label for="phase1" class="phase-tab">1. Capture</label>
+          <input type="radio" name="interrupt-phase" id="phase2" class="phase-radio">
+          <label for="phase2" class="phase-tab">2. Execute</label>
+          <input type="radio" name="interrupt-phase" id="phase3" class="phase-radio">
+          <label for="phase3" class="phase-tab">3. Restore</label>
+
+          <div class="phase-panel" data-phase="1">
+            <p class="phase-kicker" style="color:var(--pink);">INTERRUPT DETECTED</p>
+            <p class="phase-title" style="color:var(--text);font-size:1.15rem;">STATE CURRENT VECTOR</p>
+            <p class="phase-hint">( What were you doing? )</p>
+            <p class="phase-input">Reading a book...</p>
+            <span class="watch-btn cut-watch-btn phase-btn">LOCK VECTOR</span>
+          </div>
+          <div class="phase-panel" data-phase="2">
+            <p class="phase-kicker">VECTOR LOCKED</p>
+            <p class="phase-title" style="color:var(--text);font-size:0.9rem;">READING A BOOK...</p>
+            <p class="phase-kicker" style="margin-top:1.5rem;color:var(--cyan);">EXECUTE PROTOCOL</p>
+            <p class="phase-title" style="color:var(--cyan);font-size:2rem;">NUTRIENT</p>
+            <span class="watch-btn cut-watch-btn phase-btn">CONFIRM COMPLETION</span>
+          </div>
+          <div class="phase-panel" data-phase="3">
+            <p class="phase-kicker" style="color:var(--green);">SYSTEM OPTIMIZED</p>
+            <p class="phase-hint">RESUMING VECTOR:</p>
+            <p class="phase-title" style="color:var(--cyan);font-size:1.4rem;">READING A BOOK...</p>
+            <span class="watch-btn cut-watch-btn phase-btn">ENGAGE</span>
+          </div>
+        </fieldset>
+
+        <div class="deck-copy">
+          <p>
+            When a protocol comes due and you open it, the phone asks one
+            question first: <strong>what were you doing?</strong> A short
+            free-text note, before you're allowed to mark the action done.
+          </p>
+          <p>
+            Once you confirm, it shows a "system optimized" screen that hands
+            the exact thing you typed back to you before returning to the
+            dashboard. It's built around getting pulled out of a task by a
+            bodily need, not just clearing a reminder — the app tries to make
+            sure you land back where you actually were.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="deck-pain" class="deck">
+    <p class="deck-eyebrow">Deck 04</p>
+    <h2 class="dash-header-title" style="font-size:1rem;text-align:center;">PAIN &amp; SYMPTOM LOGGING</h2>
+    <div class="watch-mockup-row">
+      <div class="watch-frame" role="img" aria-label="Watch pain-logging interface demo, showing a selected pain level of 6, labeled Impairing">
+        <div class="watch-scanline"></div>
+        <span class="watch-label">DIAGNOSTIC</span>
+        <p class="watch-stat-label">TAP EDGES</p>
+        <p class="watch-stat-value" style="color:var(--pink);">6</p>
+        <p class="watch-pain-desc">IMPAIRING</p>
+        <span class="watch-btn cut-watch-btn" style="color:var(--pink);border-color:var(--pink);background:rgba(255,0,85,0.12);">CONFIRM</span>
+      </div>
+    </div>
+    <p class="watch-caption">
+      A recreation of the watch's own pain-level selector — tapping the top
+      or bottom edge raises or lowers the number, 0 to 10. Demo value shown,
+      not a live reading.
+    </p>
+    <div class="deck-copy" style="margin-left:auto;margin-right:auto;">
+      <p>
+        A separate flow from the four protocols: log a symptom on a 0–10
+        scale (from <em>resolved</em> up through <em>critical</em>) with a
+        short note on location, type, and triggers — from the watch or
+        the phone.
+      </p>
+      <p>
+        Logging anything above a 3 automatically schedules a 60-minute
+        follow-up check-in, unless it's inside your configured sleep
+        window — which can itself be overridden when round-the-clock
+        monitoring is actually wanted.
+      </p>
+    </div>
+  </section>
+
+  <section id="deck-reports" class="deck">
+    <p class="deck-eyebrow">Deck 05</p>
+    <div class="phone-frame">
+      <div class="phone-notch" aria-hidden="true"></div>
+      <div class="phone-screen">
+        <h2 class="dash-header-title" style="font-size:1rem;">REPORTS &amp; AUDITS</h2>
+        <p class="dash-header-sub">COMPLIANCE &amp; EXPORT</p>
+
+        <div class="brief-toggle-row">
+          <button type="button" class="reveal-btn brief-toggle cut-diag" aria-expanded="false" aria-controls="diagPanel">
+            <span class="brief-toggle-text" data-collapsed="DIAGNOSTICS // TAP_TO_DECRYPT" data-expanded="DIAGNOSTICS // ACCESSING_ARCHIVE">DIAGNOSTICS // TAP_TO_DECRYPT</span>
+          </button>
+        </div>
+        <div id="diagPanel" class="reveal-panel brief-panel" hidden>
+          <p>
+            Every alert the system fires is tracked end to end — issued,
+            interacted with, fulfilled — and graded success / warning /
+            failure, rolled up into a per-protocol A–F compliance score.
+          </p>
+          <p>
+            From the phone you can generate a multi-page PDF report, in
+            either the app's own dark "system" theme or a plain light
+            "clinical" theme meant for sharing with a doctor or care team. It
+            covers the raw event log, 24-hour/7-day/30-day summaries,
+            per-protocol response latency, which hour of the day tends to see
+            the most abandoned alerts, and a response-time histogram — handed
+            off through the normal Android share sheet.
+          </p>
+          <div class="export-demo">
+            <div class="export-row">
+              <span class="export-toggle" aria-hidden="true"></span>
+              <span class="export-label">MODE: SYSTEM</span>
+            </div>
+            <div class="export-range">
+              <span>RANGE:</span>
+              <span>08/14 -&gt; 09/14</span>
+            </div>
+            <span class="pdf-btn">GENERATE PDF // SHARE</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="deck-watch" class="deck">
+    <p class="deck-eyebrow">Deck 06</p>
+    <h2 class="dash-header-title" style="font-size:1rem;text-align:center;">THE WATCH APP</h2>
+    <div class="watch-mockup-row">
+      <div class="watch-frame" role="img" aria-label="Watch deck demo showing the Nutrient protocol: intake log 2 of 3, with a Log Entry button, top/bottom tap zones, and pagination dots for the five decks">
+        <div class="watch-scanline"></div>
+        <span class="watch-chevron top">&#9650;</span>
+        <span class="watch-label">PROT: NUTRIENT</span>
+        <p class="watch-stat-label">INTAKE LOG</p>
+        <p class="watch-stat-value">2 <span>/ 3</span></p>
+        <span class="watch-btn cut-watch-btn">LOG ENTRY</span>
+        <span class="watch-chevron bottom">&#9660;</span>
+        <div class="watch-dots">
+          <span class="active"></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+    </div>
+    <p class="watch-caption">
+      A recreation of one deck's actual layout — the top/bottom edges are
+      real tap zones for previous/next, the dots on the right mark which
+      of the five decks is active. Demo data, not live.
+    </p>
+    <div class="deck-copy" style="margin-left:auto;margin-right:auto;">
+      <p>
+        VITALITY.SYS ships as a standalone Wear OS app — it keeps running
+        its own schedule and alerts even when the phone is out of
+        Bluetooth range, then re-syncs once it's back.
+      </p>
+      <p>
+        Navigation is built for the bezel: rotate to move between five
+        decks (one per protocol, plus pain logging), or tap the top and
+        bottom edges of the screen. Each deck shows exactly one piece of
+        live status and one action button — nothing to scroll through.
+      </p>
+    </div>
+  </section>
+
+  <section id="deck-privacy" class="deck">
+    <p class="deck-eyebrow">Deck 07 // Privacy &amp; Offline</p>
+    <div class="phone-frame">
+      <div class="phone-notch" aria-hidden="true"></div>
+      <div class="phone-screen">
+        <h2 class="dash-header-title" style="font-size:0.95rem;">ADMIN // DATA_GOVERNANCE_PROTOCOL</h2>
+        <div class="deck-copy">
+          <blockquote class="privacy-quote">
+            "VITALITY.SYS operates on a strict self-sovereign data matrix...
+            telemetry regarding hydration and macromolecular ingestion is
+            syndicated strictly locally to your device's core repository. We
+            do not broadcast your physiological status to megacorps."
+            <cite>— the app's own Health Connect permissions screen</cite>
+          </blockquote>
+          <p>
+            Neither app requests the <code>INTERNET</code> permission, and
+            there is no networking code anywhere in either module. The only
+            channel between phone and watch is Bluetooth, and Health Connect
+            writes stay on-device. Everything else — logs, audits, daily
+            stats, your schedule — lives in a local database and
+            SharedPreferences. No accounts, no cloud sync, no analytics or
+            crash-reporting SDKs.
+          </p>
+          <p>
+            The one admin/debug panel in the codebase (data resets, synthetic
+            test alerts) doesn't exist at all in a release build — it's
+            compiled out unless the APK is built as a debug variant, and even
+            then it stays off until explicitly switched on for testing.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="deck-about" class="deck">
+    <p class="deck-eyebrow">Deck 08</p>
+    <div class="phone-frame">
+      <div class="phone-notch" aria-hidden="true"></div>
+      <div class="phone-screen">
+        <h2 class="dash-header-title" style="font-size:0.95rem;">SYS_INFO // SOURCE_ARCHIVE</h2>
+        <div class="deck-copy">
+          <h3>Part of a larger system: Overseer</h3>
+          <p>
+            VITALITY.SYS doesn't run in isolation on the watch. It broadcasts
+            its live HP and status locally to a sibling project,
+            <strong>Overseer</strong>, and can be paused by it — the two are
+            designed as modules in one broader personal system rather than as
+            one all-in-one app.
+          </p>
+          <p>
+            Overseer has its own project page:
+            <a href="https://aspdesignlabs.github.io/OVERSEER">aspdesignlabs.github.io/OVERSEER</a>.
+          </p>
+
+          <h3>Get it</h3>
+          <p>
+            There's no Play Store listing. Build it yourself from source with
+            Gradle, or watch the repo's Releases page for prebuilt APKs.
+          </p>
+          <div class="about-links">
+            <a class="btn cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS">Source on GitHub</a>
+            <a class="btn btn-ghost cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS/releases">Releases</a>
+            <a class="btn btn-ghost cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS/blob/main/LICENSE">GPL-3.0 License</a>
+          </div>
+          <p style="text-align:center;font-size:0.75rem;color:var(--text-faint);">
+            VITALITY.SYS is free software, licensed GPL-3.0. No warranty,
+            personal project, built by one person for their own use.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
 
 </main>
 
