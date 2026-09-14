@@ -32,7 +32,6 @@ import com.google.android.gms.wearable.DataClient
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMapItem
-import com.snakesan.vitalitysys.debug.applyDebugOvercharge
 import com.snakesan.vitalitysys.debug.clearDebugBleed
 import com.snakesan.vitalitysys.debug.debugBleedDamage
 import kotlinx.coroutines.isActive
@@ -247,11 +246,6 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         if (event.path == "/sys/pull_start") {
             lifecycleScope.launch { 
                 syncState = SyncState.CONNECTING_TX; vibrateAck(this@MainActivity, heavy = true); flushPainLogs()
-            }
-        }
-        if (event.path == "/sys/debug_overcharge") {
-            runOnUiThread {
-                applyDebugOvercharge()
             }
         }
         if (event.path == "/sys/pull_animate") {

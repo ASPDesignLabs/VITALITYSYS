@@ -1,6 +1,7 @@
 package com.snakesan.vitalitysys
 
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -25,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.snakesan.vitalitysys.data.NotificationAudit
 import com.snakesan.vitalitysys.data.SystemLog
+import com.snakesan.vitalitysys.debug.DebugFlags
 import com.snakesan.vitalitysys.debug.DebugPanel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -180,6 +182,15 @@ fun InterruptionOverlay(activity: MainActivity) {
 @Composable
 fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: List<NotificationAudit>) {
     val scrollState = rememberScrollState()
+    val debugContext = LocalContext.current
+
+    // ADMIN panel visibility — no permanently-visible entry point anymore;
+    // it's summoned by tapping the period in "VITALITY.SYS" three times
+    // within 600ms of each other (see the Text(".") below). Debug builds
+    // only: DebugPanel itself no-ops outside BuildConfig.DEBUG.
+    var showAdmin by remember { mutableStateOf(DebugFlags.isEnabled(debugContext)) }
+    var periodTapCount by remember { mutableIntStateOf(0) }
+    var lastPeriodTapTime by remember { mutableLongStateOf(0L) }
 
     Column(
         modifier = Modifier
@@ -192,7 +203,29 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
     ) {
         // --- HEADER ---
         Spacer(Modifier.height(4.dp))
-        Text("VITALITY.SYS", color = NeonCyan, fontSize = 24.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text("VITALITY", color = NeonCyan, fontSize = 24.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
+            Text(
+                ".",
+                color = NeonCyan, fontSize = 24.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp,
+                modifier = Modifier.clickable {
+                    if (!BuildConfig.DEBUG) return@clickable
+                    val now = System.currentTimeMillis()
+                    periodTapCount = if (now - lastPeriodTapTime <= 600L) periodTapCount + 1 else 1
+                    lastPeriodTapTime = now
+                    if (periodTapCount >= 3) {
+                        periodTapCount = 0
+                        showAdmin = DebugFlags.toggle(debugContext)
+                        Toast.makeText(
+                            debugContext,
+                            if (showAdmin) "ADMIN MODE ON" else "ADMIN MODE OFF",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            )
+            Text("SYS", color = NeonCyan, fontSize = 24.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
+        }
         Text("CLINICAL CONTROLLER", color = Color.Gray, fontSize = 10.sp, letterSpacing = 2.sp)
 
         Spacer(Modifier.height(10.dp))
@@ -355,7 +388,9 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
         Spacer(Modifier.weight(1f))
 
         ComplianceAuditModule(audits)
-        DebugPanel(activity)
+        if (showAdmin) {
+            DebugPanel(activity)
+        }
 
         Spacer(Modifier.height(20.dp))
     }
