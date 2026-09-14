@@ -374,7 +374,8 @@ fun HydrationMonitor(currentMl: Int, targetMl: Int, activeStartHour: Int, active
     val startMins = activeStartHour * 60
     val endMins = activeEndHour * 60
     
-    val timeProgress = if(currentMins < startMins) 0f else ((currentMins - startMins).toFloat() / (endMins - startMins).toFloat()).coerceIn(0f, 1f)
+    val totalMins = endMins - startMins
+    val timeProgress = if (currentMins < startMins || totalMins <= 0) 0f else ((currentMins - startMins).toFloat() / totalMins.toFloat()).coerceIn(0f, 1f)
     val actualProgress = (currentMl.toFloat() / targetMl.toFloat()).coerceIn(0f, 1f)
     val isDrifting = timeProgress > actualProgress + 0.2f
 

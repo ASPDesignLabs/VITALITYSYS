@@ -312,7 +312,13 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
             Text("ACTIVE: ${activity.activeStart.toInt()}:00 - ${activity.activeEnd.toInt()}:00", color = Color.Gray, fontSize = 10.sp)
             RangeSlider(
                 value = activity.activeStart..activity.activeEnd,
-                onValueChange = { activity.activeStart = it.start; activity.activeEnd = it.endInclusive },
+                onValueChange = {
+                    // Keep at least a 1-hour gap so the active window can never
+                    // collapse to zero width (that crashes the hydration math).
+                    if (it.endInclusive - it.start >= 1f) {
+                        activity.activeStart = it.start; activity.activeEnd = it.endInclusive
+                    }
+                },
                 valueRange = 0f..24f,
                 colors = SliderDefaults.colors(thumbColor = Color(Protocol.HYDRATION.colorHex), activeTrackColor = Color(Protocol.HYDRATION.colorHex)),
                 modifier = Modifier.height(30.dp)
@@ -355,10 +361,28 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
     }
 }
 
-// --- NEW COMPLIANCE MODULE ---
+// --- COMPLIANCE MODULE ---
+// Surfaces VitalityMath.calculateComplianceScore() — overall and broken down
+// by protocol — which previously had no consumer anywhere in the app.
 @Composable
 fun ComplianceAuditModule(audits: List<NotificationAudit>) {
     var isRevealed by remember { mutableStateOf(false) }
+
+    val overall = remember(audits) { VitalityMath.calculateComplianceScore(audits) }
+    val byProtocol = remember(audits) {
+        audits.groupBy { it.protocolType }
+            .mapValues { (_, protoAudits) -> VitalityMath.calculateComplianceScore(protoAudits) }
+            .toList()
+            .sortedBy { it.first }
+    }
+
+    fun gradeColor(grade: String): Color = when (grade) {
+        "A" -> NeonGreen
+        "B" -> NeonCyan
+        "C" -> NeonAmber
+        "N/A" -> Color.Gray
+        else -> NeonPink // D, F
+    }
 
     Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
         Box(
@@ -366,7 +390,73 @@ fun ComplianceAuditModule(audits: List<NotificationAudit>) {
                 .fillMaxWidth()
                 .height(40.dp)
                 .clip(CutCornerShape(bottomEnd = 12.dp))
-        )
+                .background(if (isRevealed) NeonPink.copy(alpha = 0.2f) else Color.DarkGray.copy(alpha = 0.3f))
+                .clickable { isRevealed = !isRevealed }
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Row(
+                Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (isRevealed) "COMPLIANCE // ACCESSING_ARCHIVE" else "COMPLIANCE // TAP_TO_DECRYPT",
+                    color = if (isRevealed) NeonPink else Color.Gray,
+                    fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp
+                )
+                if (overall.totalAlerts > 0) {
+                    Text(
+                        text = "${overall.grade} // ${overall.compliancePercentage}%",
+                        color = gradeColor(overall.grade),
+                        fontSize = 12.sp, fontWeight = FontWeight.Black
+                    )
+                }
+            }
+        }
+
+        AnimatedVisibility(visible = isRevealed) {
+            Column(
+                modifier = Modifier.fillMaxWidth().background(Color(0xFF0A0505)).padding(16.dp)
+            ) {
+                if (overall.totalAlerts == 0) {
+                    Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
+                        Text("NO ALERT HISTORY YET", color = Color.DarkGray, fontSize = 10.sp)
+                    }
+                } else {
+                    ConfigLabel("OVERALL COMPLIANCE")
+                    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                        Text(overall.grade, color = gradeColor(overall.grade), fontSize = 32.sp, fontWeight = FontWeight.Black)
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("${overall.compliancePercentage}% COMPLIANT", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                "${overall.successCount} OK / ${overall.warningCount} SLOW / ${overall.failureCount} MISSED",
+                                color = Color.Gray, fontSize = 10.sp
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(Color.DarkGray))
+                    Spacer(Modifier.height(16.dp))
+
+                    ConfigLabel("BY PROTOCOL")
+                    byProtocol.forEach { (protoName, grade) ->
+                        val label = Protocol.values().firstOrNull { it.name == protoName }?.label ?: protoName
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            Arrangement.SpaceBetween, Alignment.CenterVertically
+                        ) {
+                            Text(label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                "${grade.grade}  ${grade.compliancePercentage}%  (${grade.totalAlerts})",
+                                color = gradeColor(grade.grade), fontSize = 11.sp, fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -9,6 +9,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.RemoteInput
+import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
@@ -41,6 +42,30 @@ class VitalityListenerService : WearableListenerService() {
     }
 
     private fun triggerNotification(protocol: Protocol, itemKey: String, message: String) {
+        val issuedAt = System.currentTimeMillis()
+
+        // Start the audit trail for this alert: a NotificationAudit row, plus
+        // a 5-minute AuditCheckWorker that flags it IGNORED if nothing ever
+        // responds (see fulfillProtocolAudit / NotificationReplyReceiver /
+        // NotificationDismissReceiver for the other ends of this trail).
+        CoroutineScope(Dispatchers.IO).launch {
+            VitalityDatabase.getDatabase(applicationContext).systemDao().insertAudit(
+                NotificationAudit(
+                    notificationId = protocol.id,
+                    protocolType = protocol.name,
+                    timestampIssued = issuedAt
+                )
+            )
+        }
+
+        val auditCheckWork = OneTimeWorkRequestBuilder<AuditCheckWorker>()
+            .setInitialDelay(5, TimeUnit.MINUTES)
+            .setInputData(workDataOf("NOTIF_ID" to protocol.id))
+            .build()
+        WorkManager.getInstance(this).enqueueUniqueWork(
+            "AuditCheck_${protocol.id}", ExistingWorkPolicy.REPLACE, auditCheckWork
+        )
+
         val remoteInput = RemoteInput.Builder("KEY_TEXT_REPLY")
             .setLabel("State Current Vector...")
             .build()
@@ -69,6 +94,16 @@ class VitalityListenerService : WearableListenerService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Swiping the notification away (rather than tapping it or replying)
+        // is itself an audit-relevant outcome — mark it DISMISSED/ABANDONED.
+        val dismissIntent = Intent(this, NotificationDismissReceiver::class.java).apply {
+            putExtra("NOTIF_ID", protocol.id)
+        }
+        val dismissPendingIntent = PendingIntent.getBroadcast(
+            this, protocol.id + 200, dismissIntent, // Offset ID so it doesn't conflict with the other PendingIntents above
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         // --- START OF NOTIFICATION BUILDER ---
         val builder = NotificationCompat.Builder(this, "vitality_urgent")
             .setSmallIcon(android.R.drawable.stat_notify_error)
@@ -78,6 +113,7 @@ class VitalityListenerService : WearableListenerService() {
             .setColor(0xFF00F3FF.toInt())
             .setFullScreenIntent(appPendingIntent, true)
             .addAction(replyAction)
+            .setDeleteIntent(dismissPendingIntent)
             .setAutoCancel(true)
 
         // --- NEW CUSTOM URL LOGIC FOR CHEMISTRY ---

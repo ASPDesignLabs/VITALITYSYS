@@ -130,8 +130,8 @@ class SentinelWorker(val context: Context, workerParams: WorkerParameters) : Cor
         val startMins = config.activeStartHour.toInt() * 60
         val endMins = config.activeEndHour.toInt() * 60
 
-        if (currentMinutes in startMins..endMins) {
-            val totalActiveDuration = endMins - startMins
+        val totalActiveDuration = endMins - startMins
+        if (totalActiveDuration > 0 && currentMinutes in startMins..endMins) {
             val elapsedActive = currentMinutes - startMins
             val expectedProgress = elapsedActive.toFloat() / totalActiveDuration.toFloat()
             val expectedMl = config.hydrationTargetMl * expectedProgress
