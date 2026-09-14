@@ -781,9 +781,13 @@
     /* Keeps the full 44x44 touch target for accessibility, but stays
        visually light (no filled box) so it reads as a floating edge
        affordance instead of a panel that occludes the scrollable
-       content it sits over. */
+       content it sits over. Vertically centered on the true viewport,
+       not adjusted for the status bar -- that bar is an overlay drawn
+       on top of the frame now, not extra chrome pushing it down, so
+       50% of the real viewport height is already the frame's own
+       center. */
     position: fixed;
-    top: calc(50% + var(--statusbar-h) / 2);
+    top: 50%;
     transform: translateY(-50%);
     z-index: 30;
     align-items: center;
@@ -807,7 +811,7 @@
 
   .immersive-indicator {
     position: fixed;
-    top: calc(var(--statusbar-h) + 10px);
+    top: calc(var(--frame-gap-y, 0px) + var(--statusbar-h) + 10px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 30;
@@ -819,13 +823,42 @@
     border: 1px solid var(--border);
   }
 
-  /* Lock exactly one deck's own phone-frame full-screen at a time,
-     9:16, as large as the viewport (minus the status bar) allows. */
+  /* Lock exactly one deck's own phone-frame full-screen at a time, 9:16,
+     as large as the true viewport allows -- the phone container's own
+     outer edges ARE the usable viewport now, full stop. The status bar
+     used to reserve its own separate strip above this box, which did
+     two things wrong: shrank the frame away from a true fullscreen
+     phone, and, since it stayed full viewport-width while the frame
+     below it was letterboxed on anything wider than 9:16, produced a
+     wide top bar sitting over a narrower centered card -- reading as
+     an ordinary website header, not a phone. Fixed below by letting
+     the frame claim the entire viewport and turning the status bar
+     into an overlay sized and centered with the exact same formula as
+     the frame, so it always matches the frame's own width/position
+     pixel for pixel instead of spanning the full browser window.
+
+     --frame-h/--frame-w/--frame-gap-y are computed once here and
+     reused by both the frame and the status bar below, so they can
+     never drift apart. This is what fixes a second, subtler bug: on
+     any real phone (all of them are taller than a strict 9:16, more
+     like 19.5:9), locking to 9:16 leaves genuine letterboxing space
+     above the frame -- so the frame's own top edge sits BELOW literal
+     viewport y=0. A status bar pinned to plain "top: 0" would then
+     float above empty black space instead of sitting flush on the
+     frame it's supposed to be the top strip of. --frame-gap-y is that
+     letterbox amount, and both the frame and the bar are positioned
+     relative to it, so they always meet exactly regardless of the
+     device's actual aspect ratio. */
+  html.immersive {
+    --frame-h: min(var(--vvh, 100vh), calc(var(--vvw, 100vw) * 16 / 9));
+    --frame-w: min(var(--vvw, 100vw), calc(var(--vvh, 100vh) * 9 / 16));
+    --frame-gap-y: calc((var(--vvh, 100vh) - var(--frame-h)) / 2);
+  }
   html.immersive .deck { display: none; }
   html.immersive .deck.is-active {
     display: flex;
     position: fixed;
-    top: var(--statusbar-h);
+    top: 0;
     left: 0;
     right: 0;
     bottom: 0;
@@ -847,8 +880,8 @@
        Sizing against that inflated value was pushing the frame's own
        bezel outside what's actually visible. The 100vw/100vh fallback
        only matters for the instant before that script's first run. */
-    height: min(100%, calc(var(--vvw, 100vw) * 16 / 9));
-    width: min(100%, calc((var(--vvh, 100vh) - var(--statusbar-h)) * 9 / 16));
+    height: var(--frame-h);
+    width: var(--frame-w);
     margin: 0;
     touch-action: pan-y;
     display: flex;
@@ -857,11 +890,31 @@
   html.immersive .phone-screen {
     flex: 1;
     min-height: 0;
+    padding-top: var(--statusbar-h); /* room for the status bar overlaid on top */
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
   @media (prefers-reduced-motion: no-preference) {
     html.immersive .deck.is-sliding { transition: transform 0.32s ease; }
+  }
+
+  /* The status bar itself, switched from page chrome that pushes
+     content down to an overlay matching the phone-frame's own
+     width/position exactly (the same --frame-w/--frame-gap-y the
+     frame itself uses above), so it always reads as the frame's own
+     top strip -- never a separate, wider bar floating above a
+     narrower card, and never floating above the frame's own actual
+     top edge on a device taller than 9:16. */
+  html.immersive .statusbar {
+    position: fixed;
+    top: var(--frame-gap-y);
+    left: 50%;
+    transform: translateX(-50%);
+    width: var(--frame-w);
+    z-index: 50;
+    border: 2px solid var(--border);
+    border-bottom: none;
+    border-radius: 34px 34px 0 0;
   }
 </style>
 
