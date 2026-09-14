@@ -1,3 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!-- Without this, mobile browsers have no declared layout width to work
+     from and fall back to a desktop-style virtual viewport (~980px),
+     zooming the whole page out to fit -- which is what "locked to a 9:16
+     aspect ratio" and "fills the screen" above are depending on NOT
+     happening. This tag is the fix; the visualViewport JS below only
+     works correctly once this is in place. -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VITALITY.SYS</title>
 <meta name="description" content="A phone + Wear OS system that tracks meals, hydration, medication, and hygiene as a single HP number instead of a checklist — fully offline, GPL-3.0.">
 
@@ -917,6 +928,8 @@
     border-radius: 34px 34px 0 0;
   }
 </style>
+</head>
+<body>
 
 <a class="skip-link" href="#main">Skip to main content</a>
 
@@ -1765,3 +1778,6 @@
   }, true);
 })();
 </script>
+
+</body>
+</html>
