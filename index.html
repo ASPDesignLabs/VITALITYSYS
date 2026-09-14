@@ -14,27 +14,43 @@
 <link rel="canonical" href="https://aspdesignlabs.github.io/VITALITYSYS/">
 <meta name="theme-color" content="#050505">
 
+<!-- Search engine site-ownership verification (Google Search Console,
+     Bing Webmaster Tools). Tokens from the project owner's own accounts. -->
+<meta name="google-site-verification" content="SZDLG1pzuuhxYA0NX76ImR6k4XOPnfdyDeele5mEXyQ">
+<meta name="msvalidate.01" content="CDAAA6111F04493CBB381F0CB821E663">
+
 <link rel="icon" type="image/png" sizes="512x512" href="assets/icons/icon-512.png">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
 
-<!-- Open Graph / Twitter card -- assets/social/og-card.png, built from the
-     same design tokens/brand mark as the page itself (see
-     assets/social/og-card.source.html to regenerate it). -->
+<!-- Open Graph / Twitter card -- assets/social/og-card.png (+ a flattened
+     .jpg for X specifically, see below), built from the same design
+     tokens/brand mark as the page itself (see
+     assets/social/og-card.source.html to regenerate either).
+     The "?v=2" cache-buster: X/Twitter caches a card by the exact image
+     URL, sometimes indefinitely on a first failed fetch -- bump this
+     number any time og-card.png/.jpg actually changes, so X re-fetches
+     instead of serving a stale/broken card it cached before this image
+     existed. -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="VITALITY.SYS">
 <meta property="og:url" content="https://aspdesignlabs.github.io/VITALITYSYS/">
 <meta property="og:title" content="VITALITY.SYS — vitals, not checklists">
 <meta property="og:description" content="A phone + Wear OS system that tracks meals, hydration, medication, and hygiene as a single HP number instead of a checklist — fully offline, GPL-3.0.">
-<meta property="og:image" content="https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.png">
+<meta property="og:image" content="https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.png?v=2">
+<meta property="og:image:secure_url" content="https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.png?v=2">
+<meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="VITALITY.SYS logo — a neon pink EKG trace on a black grid — beside the text VITALITY.SYS.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="VITALITY.SYS — vitals, not checklists">
 <meta name="twitter:description" content="A phone + Wear OS system that tracks meals, hydration, medication, and hygiene as a single HP number instead of a checklist — fully offline, GPL-3.0.">
-<meta name="twitter:image" content="https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.png">
+<!-- X specifically gets the flattened JPEG (no alpha channel) -- PNGs
+     with an alpha channel, even fully opaque ones, are the more
+     X-flaky format per its own history. -->
+<meta name="twitter:image" content="https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.jpg?v=2">
 <meta name="twitter:image:alt" content="VITALITY.SYS logo — a neon pink EKG trace on a black grid — beside the text VITALITY.SYS.">
 
 <!-- Structured data for search engines (Google rich results etc.) --
@@ -51,6 +67,7 @@
   "image": "https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.png",
   "applicationCategory": "HealthApplication",
   "operatingSystem": "Android, Wear OS",
+  "softwareVersion": "1.0-beta.1",
   "offers": {
     "@type": "Offer",
     "price": "0",
@@ -769,6 +786,26 @@
   }
   .phase-btn { display: inline-block; }
 
+  /* --- FOCUS escape-difficulty demo: a static illustration of the
+     EASY/STANDARD/FIRM setting (role="img" + one aria-label, same
+     technique as the biomonitor above -- this isn't a live control). --- */
+  .focus-demo { margin-top: 10px; padding: 10px 12px; background: var(--graphite); border: 1px solid var(--border); text-align: left; }
+  .focus-demo-label { font-family: var(--font-display); color: var(--text-faint); font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; margin: 0 0 8px; }
+  .focus-demo-options { display: flex; gap: 4px; }
+  .focus-opt {
+    flex: 1;
+    text-align: center;
+    padding: 6px 4px;
+    font-family: var(--font-display);
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+    background: var(--graphite-2);
+    border: 1px solid var(--border);
+  }
+  .focus-opt.is-selected { color: var(--void); background: var(--cyan); border-color: var(--cyan); }
+
   /* --- Reports & Audits: static demo of the export controls --- */
   .export-demo { margin-top: 12px; text-align: left; }
   .export-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -1260,14 +1297,14 @@
           <input type="radio" name="interrupt-phase" id="phase1" class="phase-radio" checked>
           <label for="phase1" class="phase-tab">1. Capture</label>
           <input type="radio" name="interrupt-phase" id="phase2" class="phase-radio">
-          <label for="phase2" class="phase-tab">2. Execute</label>
+          <label for="phase2" class="phase-tab">2. Action</label>
           <input type="radio" name="interrupt-phase" id="phase3" class="phase-radio">
           <label for="phase3" class="phase-tab">3. Restore</label>
 
           <div class="phase-panel" data-phase="1">
             <p class="phase-kicker" style="color:var(--pink);">INTERRUPT DETECTED</p>
             <p class="phase-title" style="color:var(--text);font-size:1.15rem;">STATE CURRENT VECTOR</p>
-            <p class="phase-hint">( What were you doing? )</p>
+            <p class="phase-hint">( What were you doing? Type it, or attach a photo. )</p>
             <p class="phase-input">Reading a book...</p>
             <span class="watch-btn cut-watch-btn phase-btn">LOCK VECTOR</span>
           </div>
@@ -1286,18 +1323,45 @@
           </div>
         </fieldset>
 
+        <div class="focus-demo cut-panel" role="img" aria-label="FOCUS setting demo: escape difficulty set to Standard, meaning the back button asks you to confirm before skipping the capture or action screen.">
+          <p class="focus-demo-label">FOCUS // ESCAPE_DIFFICULTY</p>
+          <div class="focus-demo-options" aria-hidden="true">
+            <span class="focus-opt">EASY</span>
+            <span class="focus-opt is-selected">STANDARD</span>
+            <span class="focus-opt">FIRM</span>
+          </div>
+        </div>
+
         <div class="deck-copy">
           <p>
-            When a protocol comes due and you open it, the phone asks one
-            question first: <strong>what were you doing?</strong> A short
-            free-text note, before you're allowed to mark the action done.
+            When a protocol comes due and you respond to it, the phone
+            treats the alert as an interruption of whatever you were
+            already doing, captures that, and hands it back to you
+            afterward — state your current vector, by typing it or
+            attaching a photo, before the action screen unlocks, with that
+            captured note or photo still visible while you complete it.
           </p>
           <p>
-            Once you confirm, it shows a "system optimized" screen that hands
-            the exact thing you typed back to you before returning to the
-            dashboard. It's built around getting pulled out of a task by a
-            bodily need, not just clearing a reminder — the app tries to make
-            sure you land back where you actually were.
+            How hard it is to back out without finishing is your own
+            call. The <strong>FOCUS</strong> setting above dials it from
+            <strong>EASY</strong> (back exits immediately) through
+            <strong>STANDARD</strong> (back asks you to confirm skipping
+            first) to <strong>FIRM</strong> (back does nothing — finish it
+            or explicitly abandon it). It's a dial, not a fixed behavior:
+            steering your own follow-through is the point, not the app
+            deciding for you.
+          </p>
+          <p>
+            Once you open the app to respond, an ongoing notification
+            tracks the alert and what you typed — surviving the app being
+            killed, tapping it resumes you exactly where you left off,
+            photo included. It only clears when the protocol is actually
+            completed; escaping never dismisses it. And because either
+            device can finish a protocol, a watch tap mid-capture
+            fast-forwards the phone screen instead of leaving a stale
+            confirm button up, and a watch action taken while briefly
+            disconnected is queued and retried rather than silently
+            dropped.
           </p>
         </div>
       </div>
@@ -1511,11 +1575,19 @@
         <p class="dash-header-sub">NO PLAY STORE LISTING — GITHUB IS THE ONLY CHANNEL</p>
 
         <div class="sys-notice">
-          <strong>Status:</strong> release APKs are in progress. Until
-          they're published to GitHub Releases, build from source with
-          Gradle below.
+          <strong>Status:</strong> <code>v1.0-beta.1</code> is out.
+          Download the APK for your device below, or build from source
+          with Gradle.
         </div>
 
+        <!-- Direct-download links are pinned to this specific release's
+             asset filenames (they carry the version in the name), so
+             they WILL go stale the moment a new release ships under a
+             different tag -- update both hrefs (and the sys-notice/badge
+             version strings above and below) then, or switch to naming
+             future assets identically release over release so
+             /releases/latest/download/<name> can be used instead and
+             never need touching again. -->
         <div class="deck-copy">
           <h3>VITALITYMOBILE — phone app</h3>
           <p>
@@ -1523,6 +1595,9 @@
             pain/symptom logging, and PDF report export. Package
             <code>com.snakesan.vitalitysys</code>.
           </p>
+          <div class="about-links">
+            <a class="btn cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS/releases/download/v1.0-beta.1/VITALITYSYS-Mobile-v1-0-beta-1.apk">Download APK — v1.0-beta.1</a>
+          </div>
 
           <h3>VITALITYDECK — Wear OS app</h3>
           <p>
@@ -1531,6 +1606,9 @@
             decks. Package <code>com.snakesan.vitalitysys</code> (Wear
             module).
           </p>
+          <div class="about-links">
+            <a class="btn cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS/releases/download/v1.0-beta.1/VITALITYSYS-Wear-v1-0-beta-1.apk">Download APK — v1.0-beta.1</a>
+          </div>
 
           <h3>Requirements</h3>
           <p>
@@ -1541,7 +1619,7 @@
           </p>
 
           <div class="about-links">
-            <a class="btn cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS/releases">View Releases</a>
+            <a class="btn btn-ghost cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS/releases">All Releases</a>
             <a class="btn btn-ghost cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS">Build from Source</a>
           </div>
         </div>
