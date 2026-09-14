@@ -87,7 +87,13 @@
     outline-offset: 2px;
   }
 
-  /* --- Cut-corner motif, ported from the app's own VitalityShape / VitalityHeroShape --- */
+  /* --- Cut-corner shapes, ported 1:1 from the app's own CutCornerShape
+     values. Compose's CutCornerShape corners are ordered
+     (topStart, topEnd, bottomEnd, bottomStart); each polygon below cuts
+     the same corners by the same pixel amounts as its Kotlin source. --- */
+
+  /* VitalityShape(10,2,2,10) -- Theme.kt. Protocol cards, text inputs,
+     small action buttons everywhere in-app. */
   .cut-panel {
     clip-path: polygon(
       0 10px, 10px 0,
@@ -96,10 +102,30 @@
       2px 100%, 0 calc(100% - 2px)
     );
   }
-  .cut-hero {
+  /* VitalityHeroShape(topStart 20, bottomEnd 20) -- Theme.kt. CyberButtonBlock,
+     i.e. the app's own full-width primary action buttons. */
+  .cut-hero-btn {
+    clip-path: polygon(
+      20px 0, 100% 0,
+      100% calc(100% - 20px), calc(100% - 20px) 100%,
+      0 100%, 0 20px
+    );
+  }
+  /* CutCornerShape(topEnd 20, bottomStart 20) -- BioFluxMonitor.kt's own
+     monitor-screen shape (the opposite diagonal from VitalityHeroShape). */
+  .cut-monitor {
     clip-path: polygon(
       0 0, calc(100% - 20px) 0, 100% 20px,
       100% 100%, 20px 100%, 0 calc(100% - 20px)
+    );
+  }
+  /* CutCornerShape(topStart 10, bottomEnd 10) -- watch WatchComponents.kt's
+     CyberButton / pain-confirm shape. */
+  .cut-watch-btn {
+    clip-path: polygon(
+      10px 0, 100% 0,
+      100% calc(100% - 10px), calc(100% - 10px) 100%,
+      0 100%, 0 10px
     );
   }
 
@@ -335,6 +361,399 @@
   .p-maintenance { border-left-color: var(--amber); }
   .p-maintenance .proto-label { color: var(--amber); }
 
+  /* ============================================================
+     Dashboard preview -- a faithful CSS/SVG recreation of the phone
+     app's own VitalityDashboard: header, BioFluxMonitor status
+     monitor, and the four protocol cards. Pure CSS/SVG, no JS: it
+     works with scripting off, and the page's existing global
+     prefers-reduced-motion rule (top of this stylesheet) already
+     collapses every animation below to its resting frame with no
+     extra code needed here.
+
+     Every looping animation is authored so its 0% and 100% keyframes
+     both equal the calm "SYSTEM OPTIMAL" resting state, and the
+     un-animated base value on each element is that same resting
+     state -- so whichever frame reduced-motion (or no-JS/no-CSS-
+     animation-support) leaves things on, it's always the calm one,
+     never mid-"EMERGENCY". --------------------------------------- */
+
+  .dash-wrap { margin-top: 3rem; }
+  .dash-eyebrow {
+    text-align: center;
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin: 0 0 1rem;
+  }
+  .dash-caption {
+    max-width: 46ch;
+    margin: 1.25rem auto 0;
+    color: var(--text-faint);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+
+  .phone-frame {
+    width: min(100%, 360px);
+    margin: 0 auto;
+    background: var(--void);
+    border: 2px solid var(--border);
+    border-radius: 34px;
+    padding: 14px 14px 20px;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.55);
+  }
+  .phone-notch {
+    width: 70px;
+    height: 6px;
+    margin: 0 auto 12px;
+    background: var(--border);
+    border-radius: 3px;
+  }
+  .phone-screen { text-align: center; }
+  .dash-header-title {
+    font-family: var(--font-display);
+    color: var(--cyan);
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    font-size: 1.1rem;
+    margin: 0;
+  }
+  .dash-header-title .dot { color: var(--pink); }
+  .dash-header-sub {
+    font-family: var(--font-display);
+    color: var(--text-faint);
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    margin: 0.2rem 0 0.9rem;
+  }
+
+  /* --- BioFluxMonitor recreation --- */
+  .biomonitor { text-align: left; }
+  .bio-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+  }
+  .bio-head-label {
+    font-family: var(--font-display);
+    color: var(--cyan);
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+  .bio-head-status {
+    position: relative;
+    display: inline-block;
+    height: 1.4em;
+    flex: 1;
+    min-width: 0;
+    text-align: right;
+  }
+  .bio-head-status span {
+    position: absolute;
+    inset: 0;
+    display: block;
+    font-family: var(--font-display);
+    font-size: 0.55rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0;
+    color: var(--green);
+  }
+  /* Resting/base state: only the OPTIMAL line shown, before any animation runs. */
+  .bio-head-status .st-optimal { opacity: 1; }
+  .bio-head-status .st-warning { color: var(--amber); }
+  .bio-head-status .st-critical,
+  .bio-head-status .st-emergency,
+  .bio-head-status .st-overcharge { color: var(--pink); }
+
+  .bio-screen {
+    position: relative;
+    height: 92px;
+    background:
+      linear-gradient(var(--border) 1px, transparent 1px) 0 0 / 40px 40px,
+      linear-gradient(90deg, var(--border) 1px, transparent 1px) 0 0 / 40px 40px,
+      var(--void);
+    background-blend-mode: normal, normal, normal;
+    opacity: 1;
+    border: 1px solid rgba(0,255,65,0.5);
+    overflow: hidden;
+  }
+  .bio-screen::before {
+    /* Grid dims to a faint ember tint, matching activeGridColor in-app. */
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+  }
+  .bio-trace {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    /* CRT-style edge fade, matching BioFluxMonitor's horizontalGradient fades. */
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%);
+            mask-image: linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%);
+  }
+  .bio-trace svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 200%;
+    height: 100%;
+    color: var(--green);
+    animation: bioScroll 3s linear infinite;
+  }
+  .bio-trace path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  @keyframes bioScroll {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+  }
+
+  .bio-blip {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    opacity: 1;
+    animation: bioBlip 1.15s steps(1) infinite;
+  }
+  @keyframes bioBlip {
+    0%   { opacity: 1; }
+    18%  { opacity: 1; }
+    20%  { opacity: 0.15; }
+    100% { opacity: 0.15; }
+  }
+
+  .bio-shield {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 6px;
+  }
+  .bio-shield-label {
+    font-family: var(--font-display);
+    color: var(--cyan);
+    font-size: 0.5rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .bio-shield-track {
+    flex: 1;
+    height: 6px;
+    background: rgba(128,128,128,0.35);
+    border: 1px solid var(--cyan);
+  }
+  .bio-shield-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--cyan);
+  }
+
+  /* Narrative cycle: the whole loop is authored as one story --
+     OPTIMAL builds the shield, MAX OVERCHARGE inverts the screen as a
+     reward, then an instant reset and a slide through WARNING /
+     CRITICAL / EMERGENCY demonstrates the app's own HP status ladder
+     (the exact strings are the app's real ones, from BioFluxMonitor.kt)
+     before recovering back to OPTIMAL where the loop began. */
+  @media (prefers-reduced-motion: no-preference) {
+    .bio-head-status .st-optimal    { animation: stOptimal 30s linear infinite; }
+    .bio-head-status .st-overcharge { animation: stOvercharge 30s linear infinite; }
+    .bio-head-status .st-warning    { animation: stWarning 30s linear infinite; }
+    .bio-head-status .st-critical   { animation: stCritical 30s linear infinite; }
+    .bio-head-status .st-emergency  { animation: stEmergency 30s linear infinite; }
+    .bio-trace svg   { animation: bioScroll 3s linear infinite, bioTraceColor 30s linear infinite; }
+    .bio-screen      { animation: bioScreenBg 30s linear infinite; }
+    .bio-shield-fill { animation: bioShieldFill 30s linear infinite; }
+  }
+
+  @keyframes stOptimal    { 0%,15% {opacity:1} 16%,84% {opacity:0} 85%,100% {opacity:1} }
+  @keyframes stOvercharge { 0%,15% {opacity:0} 16%,29% {opacity:1} 30%,100% {opacity:0} }
+  @keyframes stWarning    { 0%,30% {opacity:0} 31%,49% {opacity:1} 50%,100% {opacity:0} }
+  @keyframes stCritical   { 0%,50% {opacity:0} 51%,67% {opacity:1} 68%,100% {opacity:0} }
+  @keyframes stEmergency  { 0%,68% {opacity:0} 69%,84% {opacity:1} 85%,100% {opacity:0} }
+
+  @keyframes bioTraceColor {
+    0%,15%   { color: var(--green); }
+    16%,29%  { color: var(--void); }   /* inverted: dark trace on pink screen */
+    31%,49%  { color: var(--amber); }
+    51%,84%  { color: var(--pink); }
+    85%,100% { color: var(--green); }
+  }
+  @keyframes bioScreenBg {
+    0%,15%   { background-color: var(--void); border-color: rgba(0,255,65,0.5); }
+    16%,29%  { background-color: var(--pink); border-color: var(--pink); }
+    30%,49%  { background-color: var(--void); border-color: rgba(255,153,0,0.5); }
+    51%,84%  { background-color: var(--void); border-color: rgba(255,0,85,0.5); }
+    85%,100% { background-color: var(--void); border-color: rgba(0,255,65,0.5); }
+  }
+  @keyframes bioShieldFill {
+    0%     { width: 0%; }
+    15%    { width: 100%; }
+    29%    { width: 100%; }
+    30%    { width: 0%; }
+    100%   { width: 0%; }
+  }
+
+  /* --- Protocol mini-cards --- */
+  .mini-protocols { margin-top: 14px; text-align: left; }
+  .mini-card {
+    background: var(--graphite);
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  .mini-card.mp-nutrient    { border-color: var(--cyan); }
+  .mini-card.mp-chemistry   { border-color: var(--pink); }
+  .mini-card.mp-hydration   { border-color: var(--green); }
+  .mini-card.mp-maintenance { border-color: var(--amber); }
+  .mp-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .mp-label {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    font-size: 0.65rem;
+  }
+  .mp-nutrient .mp-label    { color: var(--cyan); }
+  .mp-chemistry .mp-label   { color: var(--pink); }
+  .mp-hydration .mp-label   { color: var(--green); }
+  .mp-maintenance .mp-label { color: var(--amber); }
+  .mp-bar {
+    width: 56px;
+    height: 5px;
+    background: #000;
+    flex: none;
+  }
+  .mp-bar-fill { height: 100%; }
+  .mp-nutrient .mp-bar-fill    { background: var(--cyan); }
+  .mp-chemistry .mp-bar-fill   { background: var(--pink); }
+  .mp-hydration .mp-bar-fill   { background: var(--green); }
+  .mp-maintenance .mp-bar-fill { background: var(--amber); }
+  .mp-stat {
+    margin: 4px 0 0;
+    color: var(--text);
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+  .mp-stat span { color: var(--text-dim); font-weight: 400; font-size: 0.8rem; }
+
+  /* --- Watch deck mockup --- */
+  .watch-mockup-row {
+    display: flex;
+    justify-content: center;
+    margin: 1.5rem 0;
+  }
+  .watch-frame {
+    position: relative;
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    background: var(--void);
+    border: 3px solid var(--border);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.55);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  .watch-scanline {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--cyan);
+    opacity: 0.12;
+    top: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .watch-scanline { animation: watchScan 4s linear infinite; }
+  }
+  @keyframes watchScan {
+    0%   { top: 0; }
+    100% { top: 100%; }
+  }
+  .watch-chevron {
+    font-family: var(--font-display);
+    color: var(--cyan);
+    opacity: 0.6;
+    font-size: 0.7rem;
+    line-height: 1;
+  }
+  .watch-chevron.top { position: absolute; top: 14px; }
+  .watch-chevron.bottom { position: absolute; bottom: 14px; }
+  .watch-label {
+    font-family: var(--font-display);
+    color: var(--cyan);
+    font-size: 0.55rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    position: absolute;
+    top: 30px;
+  }
+  .watch-stat-label {
+    font-family: var(--font-display);
+    color: var(--text-faint);
+    font-size: 0.5rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    margin: 0 0 2px;
+  }
+  .watch-stat-value {
+    font-family: var(--font-display);
+    color: var(--cyan);
+    font-size: 1.7rem;
+    font-weight: 800;
+    line-height: 1;
+    margin: 0;
+  }
+  .watch-stat-value span { color: var(--text-faint); font-size: 0.9rem; font-weight: 700; }
+  .watch-btn {
+    margin-top: 10px;
+    font-family: var(--font-display);
+    color: var(--cyan);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 6px 14px;
+    background: rgba(0,243,255,0.12);
+    border: 1px solid var(--cyan);
+  }
+  .watch-dots {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .watch-dots span { width: 4px; height: 4px; background: var(--border); display: block; }
+  .watch-dots span.active { width: 5px; height: 5px; background: var(--cyan); }
+
   blockquote {
     margin: 1.25rem 0;
     padding: 1rem 1.25rem;
@@ -539,7 +958,8 @@
       <g stroke="#2a2a2a" stroke-width="1">
         <path d="M0 20H100M0 40H100M0 60H100M0 80H100M20 0V100M40 0V100M60 0V100M80 0V100"/>
       </g>
-      <path d="M0 50 H30 L38 30 L46 68 L54 22 L62 60 L70 50 H100" fill="none" stroke="#ff0055" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M0 50 H30 L38 30 L46 68 L54 22 L62 60 L70 50 H100" fill="none" stroke="#4d0016" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M0 50 H30 L38 30 L46 68 L54 22 L62 60 L70 50 H100" fill="none" stroke="#ff0055" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     <h1>VITALITY<span class="dot">.</span>SYS</h1>
     <p class="tagline">Vitals, not checklists.</p>
@@ -550,8 +970,81 @@
       low health felt, instead of sitting quietly in a to-do list.
     </p>
     <div class="hero-ctas">
-      <a class="btn" href="https://github.com/ASPDesignLabs/VITALITYSYS">View on GitHub</a>
-      <a class="btn btn-ghost" href="#how-it-works">See how it works</a>
+      <a class="btn cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS">View on GitHub</a>
+      <a class="btn btn-ghost cut-hero-btn" href="#how-it-works">See how it works</a>
+    </div>
+
+    <div class="dash-wrap">
+      <p class="dash-eyebrow">What you'll actually see</p>
+      <div class="phone-frame" aria-hidden="true">
+        <div class="phone-notch"></div>
+        <div class="phone-screen">
+          <p class="dash-header-title">VITALITY<span class="dot">.</span>SYS</p>
+          <p class="dash-header-sub">CLINICAL CONTROLLER</p>
+
+          <div class="biomonitor">
+            <div class="bio-head">
+              <span class="bio-head-label">CURRENT_STATE</span>
+              <span class="bio-head-status">
+                <span class="st-optimal">SYSTEM OPTIMAL // VITALS STABLE</span>
+                <span class="st-overcharge">MAX OVERCHARGE // EDGERUNNER</span>
+                <span class="st-warning">WARNING: HOMEOSTASIS DEGRADING</span>
+                <span class="st-critical">CRITICAL ERROR: INTEGRITY FAILING</span>
+                <span class="st-emergency">EMERGENCY: SYSTEM SHUTDOWN IMMINENT</span>
+              </span>
+            </div>
+            <div class="bio-screen cut-monitor">
+              <div class="bio-trace">
+                <svg viewBox="0 0 400 100" preserveAspectRatio="none">
+                  <path d="M0,50 L120,50 L136,50 L148,35 L160,50 L172,65 L184,20 L196,80 L208,50 L220,45 L232,50 L400,50 L520,50 L536,50 L548,35 L560,50 L572,65 L584,20 L596,80 L608,50 L620,45 L632,50 L800,50" />
+                </svg>
+              </div>
+              <span class="bio-blip"></span>
+            </div>
+            <div class="bio-shield">
+              <span class="bio-shield-label">OC_SHIELD</span>
+              <div class="bio-shield-track"><div class="bio-shield-fill"></div></div>
+            </div>
+          </div>
+
+          <div class="mini-protocols">
+            <div class="mini-card cut-panel mp-nutrient">
+              <div class="mp-top">
+                <span class="mp-label">Nutrient</span>
+                <div class="mp-bar"><div class="mp-bar-fill" style="width:66%"></div></div>
+              </div>
+              <p class="mp-stat">2 <span>/ 3 MEALS</span></p>
+            </div>
+            <div class="mini-card cut-panel mp-chemistry">
+              <div class="mp-top">
+                <span class="mp-label">Chemistry</span>
+                <div class="mp-bar"><div class="mp-bar-fill" style="width:75%"></div></div>
+              </div>
+              <p class="mp-stat">3 <span>/ 4 DOSES</span></p>
+            </div>
+            <div class="mini-card cut-panel mp-hydration">
+              <div class="mp-top">
+                <span class="mp-label">Hydration</span>
+                <div class="mp-bar"><div class="mp-bar-fill" style="width:62%"></div></div>
+              </div>
+              <p class="mp-stat">5 <span>/ 8 DOSES</span></p>
+            </div>
+            <div class="mini-card cut-panel mp-maintenance">
+              <div class="mp-top">
+                <span class="mp-label">Maintenance</span>
+                <div class="mp-bar"><div class="mp-bar-fill" style="width:50%"></div></div>
+              </div>
+              <p class="mp-stat">1 <span>/ 2 TASKS</span></p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="dash-caption">
+        A direct recreation of the phone dashboard's own status monitor and
+        protocol cards — same cut-corner shapes, same protocol colors, same
+        status ladder the real app uses. The numbers above are a demo, not
+        live data.
+      </p>
     </div>
   </section>
 
@@ -791,6 +1284,27 @@
         bottom edges of the screen. Each deck shows exactly one piece of
         live status and one action button — nothing to scroll through.
       </p>
+
+      <div class="watch-mockup-row">
+        <div class="watch-frame" aria-hidden="true">
+          <div class="watch-scanline"></div>
+          <span class="watch-chevron top">&#9650;</span>
+          <span class="watch-label">PROT: NUTRIENT</span>
+          <p class="watch-stat-label">INTAKE LOG</p>
+          <p class="watch-stat-value">2 <span>/ 3</span></p>
+          <span class="watch-btn cut-watch-btn">LOG ENTRY</span>
+          <span class="watch-chevron bottom">&#9660;</span>
+          <div class="watch-dots">
+            <span class="active"></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+      <p class="dash-caption">
+        A recreation of one deck's actual layout — the top/bottom edges are
+        real tap zones for previous/next, the dots on the right mark which
+        of the five decks is active. Demo data, not live.
+      </p>
+
       <div class="shot-row">
         <button type="button" class="shot-thumb shot-square" data-shot-name="Watch deck protocol view" data-shot-src="assets/screenshots/watch-deck.png">
           <span class="shot-thumb-sr">View watch deck protocol screenshot, full size</span>
