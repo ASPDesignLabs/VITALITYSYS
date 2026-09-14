@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-a11y-textsize="2">
 <head>
 <meta charset="UTF-8">
 <!-- Without this, mobile browsers have no declared layout width to work
@@ -116,6 +116,38 @@
       transition-duration: 0.001ms !important;
       scroll-behavior: auto !important;
     }
+  }
+
+  /* --- Manual accessibility overrides (Accessibility menu, next to
+     DECKS) -- independent of the OS-level prefers-* queries above, for
+     a visitor who wants one of these just on this site, or whose
+     browser/OS doesn't expose an equivalent toggle. Persisted to
+     localStorage; see the <script> blocks. "2" (100%) and no contrast/
+     motion classes is the plain default already present in the raw
+     HTML below, so a visitor with JS disabled gets that sane baseline,
+     never a broken or unstyled one. */
+  html[data-a11y-textsize="1"] { font-size: 87.5%; }
+  html[data-a11y-textsize="2"] { font-size: 100%; }
+  html[data-a11y-textsize="3"] { font-size: 112.5%; }
+  html[data-a11y-textsize="4"] { font-size: 125%; }
+  html[data-a11y-textsize="5"] { font-size: 137.5%; }
+  html[data-a11y-textsize="6"] { font-size: 150%; }
+
+  html.a11y-contrast {
+    --void: #000000;
+    --graphite: #0d0d0d;
+    --graphite-2: #141414;
+    --text-dim: #ffffff;
+    --text-faint: #e0e0e0;
+    --border: #ffffff;
+  }
+
+  html.a11y-motion-off { scroll-behavior: auto; }
+  html.a11y-motion-off *, html.a11y-motion-off *::before, html.a11y-motion-off *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 
   body {
@@ -315,6 +347,104 @@
   }
   .deck-select-menu a:hover, .deck-select-menu a:focus-visible { color: var(--cyan); background: rgba(0,243,255,0.06); }
 
+  /* --- Accessibility menu -- same native <details> disclosure
+     technique as DECKS above, just with controls instead of links, and
+     an icon-only summary (aria-label stands in for the missing visible
+     text). --- */
+  details.a11y-select { position: relative; }
+  details.a11y-select > summary {
+    list-style: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    color: var(--text-dim);
+  }
+  details.a11y-select > summary::-webkit-details-marker { display: none; }
+  details.a11y-select > summary::marker { content: ""; }
+  details.a11y-select[open] > summary { color: var(--green); }
+  details.a11y-select > summary:focus-visible { outline: 3px solid var(--green); outline-offset: 2px; }
+  .a11y-icon { width: 22px; height: 22px; }
+
+  .a11y-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 240px;
+    background: var(--graphite);
+    border: 1px solid var(--cyan);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+    padding: 0.75rem 0.9rem 0.9rem;
+    z-index: 20;
+    text-align: left;
+  }
+  .a11y-menu-label {
+    font-family: var(--font-display);
+    color: var(--text-faint);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    margin: 0 0 0.75rem;
+  }
+  .a11y-field { border: 0; padding: 0; margin: 0 0 0.9rem; }
+  .a11y-field legend {
+    font-family: var(--font-display);
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 0;
+    margin: 0 0 0.4rem;
+  }
+  .a11y-textsize-group { display: flex; gap: 3px; }
+  .a11y-textsize-group input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .a11y-textsize-group label {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    height: 32px;
+    font-family: var(--font-display);
+    font-weight: 800;
+    color: var(--text-faint);
+    background: var(--graphite-2);
+    border: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .a11y-textsize-group input:checked + label { color: var(--void); background: var(--cyan); border-color: var(--cyan); }
+  .a11y-textsize-group input:focus-visible + label { outline: 3px solid var(--green); outline-offset: 1px; }
+
+  .a11y-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    min-height: 44px;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+  }
+  .a11y-toggle-row input {
+    position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0;
+  }
+  .a11y-toggle-track {
+    position: relative;
+    width: 30px; height: 16px; flex: none;
+    border: 1px solid var(--border);
+    background: transparent;
+    clip-path: polygon(4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px), 0 4px);
+  }
+  .a11y-toggle-track::after {
+    content: "";
+    position: absolute; top: 2px; left: 2px; width: 10px; height: 10px;
+    background: var(--text-faint);
+  }
+  .a11y-toggle-row input:checked + .a11y-toggle-track { border-color: var(--cyan); background: rgba(0,243,255,0.12); }
+  .a11y-toggle-row input:checked + .a11y-toggle-track::after { background: var(--cyan); transform: translateX(14px); }
+  .a11y-toggle-row input:focus-visible + .a11y-toggle-track { outline: 3px solid var(--green); outline-offset: 2px; }
+  .a11y-toggle-row input:checked ~ span:last-child { color: var(--text); }
+
   /* ============================================================
      Decks -- each is one recreated app screen. A small meta label
      above each frame identifies which deck it is (page furniture,
@@ -359,6 +489,13 @@
     letter-spacing: 0.2em;
     font-size: 1.1rem;
     margin: 0;
+    /* Several of these are long underscore_joined strings (e.g.
+       DATA_GOVERNANCE_PROTOCOL) with no natural break point -- fine at
+       normal text size, but the accessibility menu's largest text-size
+       step can make one wider than its phone-frame and push the whole
+       page into horizontal scroll. overflow-wrap lets it break mid-word
+       only if it has to, so it never causes that at any text size. */
+    overflow-wrap: break-word;
   }
   .dash-header-title .dot { color: var(--pink); }
   .dash-header-sub {
@@ -830,6 +967,24 @@
 
 <a class="skip-link" href="#main">Skip to main content</a>
 
+<script>
+// Restores any stored accessibility preferences before the rest of the
+// page paints, so there's no flash of the default text size/contrast/
+// motion before the end-of-body controller below "catches up." Doesn't
+// gate any content -- with JS disabled this only ever leaves the plain
+// default (data-a11y-textsize="2", no other classes) already sitting in
+// the raw HTML, never a broken or half-styled page.
+(function () {
+  var root = document.documentElement;
+  try {
+    var size = localStorage.getItem('vitalitysys-a11y-textsize');
+    if (size) root.setAttribute('data-a11y-textsize', size);
+    if (localStorage.getItem('vitalitysys-a11y-contrast') === '1') root.classList.add('a11y-contrast');
+    if (localStorage.getItem('vitalitysys-a11y-motion') === '1') root.classList.add('a11y-motion-off');
+  } catch (e) {}
+})();
+</script>
+
 <header class="statusbar">
   <span class="statusbar-clock" id="statusClock" aria-hidden="true">09:41</span>
   <div class="statusbar-right">
@@ -838,6 +993,49 @@
       <rect x="21.5" y="4" width="2" height="4" fill="currentColor"/>
       <rect x="2" y="2" width="16" height="8" fill="currentColor"/>
     </svg>
+    <details class="a11y-select">
+      <summary aria-label="Accessibility settings">
+        <svg class="a11y-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="10.2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <circle cx="12" cy="7.6" r="1.7" fill="currentColor"/>
+          <rect x="6.2" y="10.4" width="11.6" height="1.7" rx="0.85" fill="currentColor"/>
+          <rect x="10.9" y="10.4" width="2.2" height="4.6" fill="currentColor"/>
+          <path d="M10.9 14.6 L8.4 18.6 M13.1 14.6 L15.6 18.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+        </svg>
+      </summary>
+      <div class="a11y-menu">
+        <p class="a11y-menu-label">ACCESSIBILITY</p>
+
+        <fieldset class="a11y-field">
+          <legend>Text size</legend>
+          <div class="a11y-textsize-group">
+            <input type="radio" name="a11y-textsize" id="a11y-ts1" value="1">
+            <label for="a11y-ts1" style="font-size:0.65rem;">A<span class="visually-hidden"> size 1 of 6, smallest</span></label>
+            <input type="radio" name="a11y-textsize" id="a11y-ts2" value="2" checked>
+            <label for="a11y-ts2" style="font-size:0.8rem;">A<span class="visually-hidden"> size 2 of 6, default</span></label>
+            <input type="radio" name="a11y-textsize" id="a11y-ts3" value="3">
+            <label for="a11y-ts3" style="font-size:0.95rem;">A<span class="visually-hidden"> size 3 of 6</span></label>
+            <input type="radio" name="a11y-textsize" id="a11y-ts4" value="4">
+            <label for="a11y-ts4" style="font-size:1.1rem;">A<span class="visually-hidden"> size 4 of 6</span></label>
+            <input type="radio" name="a11y-textsize" id="a11y-ts5" value="5">
+            <label for="a11y-ts5" style="font-size:1.25rem;">A<span class="visually-hidden"> size 5 of 6</span></label>
+            <input type="radio" name="a11y-textsize" id="a11y-ts6" value="6">
+            <label for="a11y-ts6" style="font-size:1.4rem;">A<span class="visually-hidden"> size 6 of 6, largest</span></label>
+          </div>
+        </fieldset>
+
+        <label class="a11y-toggle-row">
+          <input type="checkbox" id="a11yContrast">
+          <span class="a11y-toggle-track" aria-hidden="true"></span>
+          <span>High contrast</span>
+        </label>
+        <label class="a11y-toggle-row">
+          <input type="checkbox" id="a11yMotion">
+          <span class="a11y-toggle-track" aria-hidden="true"></span>
+          <span>Reduce motion</span>
+        </label>
+      </div>
+    </details>
     <details class="deck-select">
       <summary>DECKS <span class="car" aria-hidden="true">&#9662;</span></summary>
       <div class="deck-select-menu">
@@ -1415,18 +1613,20 @@
   setInterval(updateClock, 15000);
 
   var deckSelect = document.querySelector('details.deck-select');
-  if (deckSelect) {
+  var a11ySelect = document.querySelector('details.a11y-select');
+  [deckSelect, a11ySelect].forEach(function (el) {
+    if (!el) return;
     document.addEventListener('click', function (e) {
-      if (deckSelect.open && !deckSelect.contains(e.target)) deckSelect.open = false;
+      if (el.open && !el.contains(e.target)) el.open = false;
     });
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && deckSelect.open) {
-        deckSelect.open = false;
-        var s = deckSelect.querySelector('summary');
+      if (e.key === 'Escape' && el.open) {
+        el.open = false;
+        var s = el.querySelector('summary');
         if (s) s.focus();
       }
     });
-  }
+  });
 
   /* --- Generic reveal (DiagnosticModule-style tap-to-expand), shared by
      SYSTEM BRIEF and the protocol cards. --- */
@@ -1448,6 +1648,44 @@
       a.addEventListener('click', function () { deckSelect.open = false; });
     });
   }
+
+  /* --- Accessibility menu: text size / high contrast / reduce motion.
+     The early <script> in <head> already applied any stored preference
+     before this ran (avoiding a flash of the wrong setting) -- this
+     just syncs the controls to match that, and wires them to update
+     and persist on change. Left open after a change (unlike DECKS,
+     which navigates away and closes) so more than one setting can be
+     adjusted per visit. */
+  (function () {
+    var root = document.documentElement;
+    var textsizeInputs = document.querySelectorAll('input[name="a11y-textsize"]');
+    var contrastInput = document.getElementById('a11yContrast');
+    var motionInput = document.getElementById('a11yMotion');
+
+    var currentSize = root.getAttribute('data-a11y-textsize') || '2';
+    textsizeInputs.forEach(function (input) { input.checked = (input.value === currentSize); });
+    if (contrastInput) contrastInput.checked = root.classList.contains('a11y-contrast');
+    if (motionInput) motionInput.checked = root.classList.contains('a11y-motion-off');
+
+    textsizeInputs.forEach(function (input) {
+      input.addEventListener('change', function () {
+        root.setAttribute('data-a11y-textsize', input.value);
+        try { localStorage.setItem('vitalitysys-a11y-textsize', input.value); } catch (e) {}
+      });
+    });
+    if (contrastInput) {
+      contrastInput.addEventListener('change', function () {
+        root.classList.toggle('a11y-contrast', contrastInput.checked);
+        try { localStorage.setItem('vitalitysys-a11y-contrast', contrastInput.checked ? '1' : '0'); } catch (e) {}
+      });
+    }
+    if (motionInput) {
+      motionInput.addEventListener('change', function () {
+        root.classList.toggle('a11y-motion-off', motionInput.checked);
+        try { localStorage.setItem('vitalitysys-a11y-motion', motionInput.checked ? '1' : '0'); } catch (e) {}
+      });
+    }
+  })();
 })();
 </script>
 
