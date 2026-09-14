@@ -14,27 +14,45 @@
 <link rel="canonical" href="https://aspdesignlabs.github.io/VITALITYSYS/">
 <meta name="theme-color" content="#050505">
 
+<!-- Search engine site-ownership verification (Google Search Console,
+     Bing Webmaster Tools). Tokens from the project owner's own accounts. -->
+<meta name="google-site-verification" content="SZDLG1pzuuhxYA0NX76ImR6k4XOPnfdyDeele5mEXyQ">
+<meta name="msvalidate.01" content="CDAAA6111F04493CBB381F0CB821E663">
+
 <link rel="icon" type="image/png" sizes="512x512" href="assets/icons/icon-512.png">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
 
-<!-- Open Graph / Twitter card -- assets/social/og-card.png, built from the
-     same design tokens/brand mark as the page itself (see
-     assets/social/og-card.source.html to regenerate it). -->
+<!-- Open Graph / Twitter card -- assets/social/og-card.png (+ a flattened
+     .jpg for X specifically, see below), built from the same design
+     tokens/brand mark as the page itself (see
+     assets/social/og-card.source.html to regenerate either).
+     The "?v=2" cache-buster: X/Twitter caches a card by the exact image
+     URL, sometimes indefinitely on a first failed fetch -- bump this
+     number any time og-card.png/.jpg actually changes, so X re-fetches
+     instead of serving a stale/broken card it cached before this image
+     existed. -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="VITALITY.SYS">
 <meta property="og:url" content="https://aspdesignlabs.github.io/VITALITYSYS/">
 <meta property="og:title" content="VITALITY.SYS — vitals, not checklists">
 <meta property="og:description" content="A phone + Wear OS system that tracks meals, hydration, medication, and hygiene as a single HP number instead of a checklist — fully offline, GPL-3.0.">
-<meta property="og:image" content="https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.png">
+<meta property="og:image" content="https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.png?v=2">
+<meta property="og:image:secure_url" content="https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.png?v=2">
+<meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="VITALITY.SYS logo — a neon pink EKG trace on a black grid — beside the text VITALITY.SYS.">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@Snakesan">
+<meta name="twitter:creator" content="@Snakesan">
 <meta name="twitter:title" content="VITALITY.SYS — vitals, not checklists">
 <meta name="twitter:description" content="A phone + Wear OS system that tracks meals, hydration, medication, and hygiene as a single HP number instead of a checklist — fully offline, GPL-3.0.">
-<meta name="twitter:image" content="https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.png">
+<!-- X specifically gets the flattened JPEG (no alpha channel) -- PNGs
+     with an alpha channel, even fully opaque ones, are the more
+     X-flaky format per its own history. -->
+<meta name="twitter:image" content="https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.jpg?v=2">
 <meta name="twitter:image:alt" content="VITALITY.SYS logo — a neon pink EKG trace on a black grid — beside the text VITALITY.SYS.">
 
 <!-- Structured data for search engines (Google rich results etc.) --
@@ -51,6 +69,7 @@
   "image": "https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.png",
   "applicationCategory": "HealthApplication",
   "operatingSystem": "Android, Wear OS",
+  "softwareVersion": "1.0-beta.1",
   "offers": {
     "@type": "Offer",
     "price": "0",
@@ -256,31 +275,6 @@
   }
   .statusbar-clock { color: var(--text-dim); letter-spacing: 0.05em; }
   .statusbar-right { display: flex; align-items: center; gap: 0.75rem; }
-
-  /* --- Immersive/Classic layout toggle, a real checkbox styled as a
-     switch (native semantics, keyboard/AT support for free). Always
-     visible in the status bar, in both layout modes. --- */
-  .immersive-toggle { display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; min-height: 44px; padding: 4px; }
-  .immersive-toggle input {
-    position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0;
-  }
-  .immersive-toggle-track {
-    position: relative;
-    width: 30px; height: 16px; flex: none;
-    border: 1px solid var(--border);
-    background: transparent;
-    clip-path: polygon(4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px), 0 4px);
-  }
-  .immersive-toggle-track::after {
-    content: "";
-    position: absolute; top: 2px; left: 2px; width: 10px; height: 10px;
-    background: var(--text-faint);
-  }
-  .immersive-toggle input:checked + .immersive-toggle-track { border-color: var(--cyan); background: rgba(0,243,255,0.12); }
-  .immersive-toggle input:checked + .immersive-toggle-track::after { background: var(--cyan); transform: translateX(14px); }
-  .immersive-toggle input:focus-visible + .immersive-toggle-track { outline: 3px solid var(--green); outline-offset: 2px; }
-  .immersive-toggle-label { font-size: 0.6rem; font-weight: 700; color: var(--text-dim); letter-spacing: 0.04em; }
-  .immersive-toggle input:checked ~ .immersive-toggle-label { color: var(--cyan); }
   .statusbar-battery { width: 22px; height: 11px; color: var(--text-dim); }
 
   details.deck-select { position: relative; }
@@ -769,6 +763,26 @@
   }
   .phase-btn { display: inline-block; }
 
+  /* --- FOCUS escape-difficulty demo: a static illustration of the
+     EASY/STANDARD/FIRM setting (role="img" + one aria-label, same
+     technique as the biomonitor above -- this isn't a live control). --- */
+  .focus-demo { margin-top: 10px; padding: 10px 12px; background: var(--graphite); border: 1px solid var(--border); text-align: left; }
+  .focus-demo-label { font-family: var(--font-display); color: var(--text-faint); font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; margin: 0 0 8px; }
+  .focus-demo-options { display: flex; gap: 4px; }
+  .focus-opt {
+    flex: 1;
+    text-align: center;
+    padding: 6px 4px;
+    font-family: var(--font-display);
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+    background: var(--graphite-2);
+    border: 1px solid var(--border);
+  }
+  .focus-opt.is-selected { color: var(--void); background: var(--cyan); border-color: var(--cyan); }
+
   /* --- Reports & Audits: static demo of the export controls --- */
   .export-demo { margin-top: 12px; text-align: left; }
   .export-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -810,212 +824,15 @@
   .deck-copy h3 { font-family: var(--font-display); color: var(--text); font-size: 0.85rem; margin: 1.25rem 0 0.5rem; }
   .deck-copy h3:first-child { margin-top: 0; }
 
-  /* ============================================================
-     Immersive layout -- an alternative presentation of the exact
-     same deck markup above, not a duplicate. Classic (the default
-     CSS, everything above this block) stays the real fallback: with
-     JS disabled, html never gets the "immersive" class, none of the
-     rules below ever match, and the page is precisely today's
-     scrolling document. Toggled via #immersiveToggle in the status
-     bar, persisted to localStorage; see the <script> blocks for the
-     controller. --------------------------------------------------- */
-
-  .immersive-nav, .immersive-indicator { display: none; }
-  html.immersive .immersive-nav { display: flex; }
-  html.immersive .immersive-indicator { display: block; }
-
-  .immersive-nav {
-    /* Keeps the full 44x44 touch target for accessibility, but stays
-       visually light (no filled box) so it reads as a floating edge
-       affordance instead of a panel that occludes the scrollable
-       content it sits over. Vertically centered on the true viewport,
-       not adjusted for the status bar -- that bar is an overlay drawn
-       on top of the frame now, not extra chrome pushing it down, so
-       50% of the real viewport height is already the frame's own
-       center. */
-    position: fixed;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 30;
-    align-items: center;
-    justify-content: center;
-    width: 44px;
-    height: 44px;
-    background: transparent;
-    border: none;
-    color: var(--cyan);
-    font-size: 1.3rem;
-    text-shadow: 0 0 5px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95);
-    cursor: pointer;
-    opacity: 0.6;
-    transition: opacity 0.15s ease;
-  }
-  .immersive-nav:hover, .immersive-nav:focus-visible { opacity: 1; }
-  .immersive-nav:focus-visible { outline: 3px solid var(--green); outline-offset: 2px; }
-  .immersive-nav[disabled] { opacity: 0.15; cursor: default; pointer-events: none; }
-  .immersive-nav-prev { left: 8px; }
-  .immersive-nav-next { right: 8px; }
-
-  .immersive-indicator {
-    position: fixed;
-    top: calc(var(--frame-gap-y, 0px) + var(--statusbar-h) + 10px);
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 30;
-    font-family: var(--font-display);
-    font-size: 0.65rem;
-    color: var(--text-faint);
-    background: rgba(5,5,5,0.75);
-    padding: 3px 10px;
-    border: 1px solid var(--border);
-  }
-
-  /* Lock exactly one deck's own phone-frame full-screen at a time, 9:16,
-     as large as the true viewport allows -- the phone container's own
-     outer edges ARE the usable viewport now, full stop. The status bar
-     used to reserve its own separate strip above this box, which did
-     two things wrong: shrank the frame away from a true fullscreen
-     phone, and, since it stayed full viewport-width while the frame
-     below it was letterboxed on anything wider than 9:16, produced a
-     wide top bar sitting over a narrower centered card -- reading as
-     an ordinary website header, not a phone. Fixed below by letting
-     the frame claim the entire viewport and turning the status bar
-     into an overlay sized and centered with the exact same formula as
-     the frame, so it always matches the frame's own width/position
-     pixel for pixel instead of spanning the full browser window.
-
-     --frame-h/--frame-w/--frame-gap-y are computed once here and
-     reused by both the frame and the status bar below, so they can
-     never drift apart. This is what fixes a second, subtler bug: on
-     any real phone (all of them are taller than a strict 9:16, more
-     like 19.5:9), locking to 9:16 leaves genuine letterboxing space
-     above the frame -- so the frame's own top edge sits BELOW literal
-     viewport y=0. A status bar pinned to plain "top: 0" would then
-     float above empty black space instead of sitting flush on the
-     frame it's supposed to be the top strip of. --frame-gap-y is that
-     letterbox amount, and both the frame and the bar are positioned
-     relative to it, so they always meet exactly regardless of the
-     device's actual aspect ratio. */
-  html.immersive {
-    --frame-h: min(var(--vvh, 100vh), calc(var(--vvw, 100vw) * 16 / 9));
-    --frame-w: min(var(--vvw, 100vw), calc(var(--vvh, 100vh) * 9 / 16));
-    --frame-gap-y: calc((var(--vvh, 100vh) - var(--frame-h)) / 2);
-  }
-  html.immersive .deck { display: none; }
-  html.immersive .deck.is-active {
-    display: flex;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    overflow: hidden;
-    align-items: center;
-    justify-content: center;
-    max-width: none;
-    margin: 0;
-    padding: 0;
-    background: #000;
-    z-index: 20;
-  }
-  html.immersive .deck.is-active .deck-eyebrow { display: none; }
-  html.immersive .phone-frame {
-    /* var(--vvw)/(--vvh), in real px, are kept in sync with the actual
-       visible viewport by the early <script> above -- not plain
-       100vw/100vh, which report the full layout viewport on mobile
-       and don't shrink when the browser's address bar is on screen.
-       Sizing against that inflated value was pushing the frame's own
-       bezel outside what's actually visible. The 100vw/100vh fallback
-       only matters for the instant before that script's first run. */
-    height: var(--frame-h);
-    width: var(--frame-w);
-    margin: 0;
-    touch-action: pan-y;
-    display: flex;
-    flex-direction: column;
-  }
-  html.immersive .phone-screen {
-    flex: 1;
-    min-height: 0;
-    padding-top: var(--statusbar-h); /* room for the status bar overlaid on top */
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    html.immersive .deck.is-sliding { transition: transform 0.32s ease; }
-  }
-
-  /* The status bar itself, switched from page chrome that pushes
-     content down to an overlay matching the phone-frame's own
-     width/position exactly (the same --frame-w/--frame-gap-y the
-     frame itself uses above), so it always reads as the frame's own
-     top strip -- never a separate, wider bar floating above a
-     narrower card, and never floating above the frame's own actual
-     top edge on a device taller than 9:16. */
-  html.immersive .statusbar {
-    position: fixed;
-    top: var(--frame-gap-y);
-    left: 50%;
-    transform: translateX(-50%);
-    width: var(--frame-w);
-    z-index: 50;
-    border: 2px solid var(--border);
-    border-bottom: none;
-    border-radius: 34px 34px 0 0;
-  }
 </style>
 </head>
 <body>
 
 <a class="skip-link" href="#main">Skip to main content</a>
 
-<script>
-// Runs before the decks below are parsed, so the layout mode is already
-// decided by the time they render -- avoids a flash of the wrong layout.
-// Immersive is the default; only an explicit stored "classic" opts out.
-(function () {
-  var immersive = true;
-  try { immersive = localStorage.getItem('vitalitysys-layout') !== 'classic'; } catch (e) {}
-  if (immersive) document.documentElement.classList.add('immersive');
-})();
-
-// --- Real viewport size, kept in sync for the immersive phone-frame's
-// aspect-ratio math (see --vvw/--vvh below). Plain 100vh/100vw on a
-// phone report the full layout viewport, not what's actually visible
-// once the browser's address bar is factored in -- sizing against
-// that inflated value is what was pushing the frame's own bezel
-// (its rounded top/bottom, the "phone body") outside the real visible
-// area on mobile. window.visualViewport (where supported) is the
-// platform API built specifically to report the true visible size,
-// and it fires its own resize/scroll events when the browser chrome
-// shows or hides, so this stays correct as that happens live. ------
-(function () {
-  var root = document.documentElement;
-  function updateViewportVars() {
-    var vv = window.visualViewport;
-    var w = vv ? vv.width : window.innerWidth;
-    var h = vv ? vv.height : window.innerHeight;
-    root.style.setProperty('--vvw', w + 'px');
-    root.style.setProperty('--vvh', h + 'px');
-  }
-  updateViewportVars();
-  window.addEventListener('resize', updateViewportVars);
-  window.addEventListener('orientationchange', updateViewportVars);
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', updateViewportVars);
-    window.visualViewport.addEventListener('scroll', updateViewportVars);
-  }
-})();
-</script>
-
 <header class="statusbar">
   <span class="statusbar-clock" id="statusClock" aria-hidden="true">09:41</span>
   <div class="statusbar-right">
-    <label class="immersive-toggle">
-      <input type="checkbox" id="immersiveToggle" checked>
-      <span class="immersive-toggle-track" aria-hidden="true"></span>
-      <span class="immersive-toggle-label">Immersive</span>
-    </label>
     <svg class="statusbar-battery" viewBox="0 0 24 12" aria-hidden="true" focusable="false">
       <rect x="0.5" y="0.5" width="20" height="11" rx="2" ry="2" fill="none" stroke="currentColor"/>
       <rect x="21.5" y="4" width="2" height="4" fill="currentColor"/>
@@ -1037,15 +854,6 @@
     </details>
   </div>
 </header>
-
-<button type="button" class="immersive-nav immersive-nav-prev" id="immersivePrev" aria-label="Previous deck">
-  <span aria-hidden="true">&#10094;</span>
-</button>
-<button type="button" class="immersive-nav immersive-nav-next" id="immersiveNext" aria-label="Next deck">
-  <span aria-hidden="true">&#10095;</span>
-</button>
-<div class="immersive-indicator" id="immersiveIndicator" aria-hidden="true"></div>
-<div class="visually-hidden" id="immersiveLiveRegion" aria-live="polite"></div>
 
 <main id="main">
 
@@ -1260,14 +1068,14 @@
           <input type="radio" name="interrupt-phase" id="phase1" class="phase-radio" checked>
           <label for="phase1" class="phase-tab">1. Capture</label>
           <input type="radio" name="interrupt-phase" id="phase2" class="phase-radio">
-          <label for="phase2" class="phase-tab">2. Execute</label>
+          <label for="phase2" class="phase-tab">2. Action</label>
           <input type="radio" name="interrupt-phase" id="phase3" class="phase-radio">
           <label for="phase3" class="phase-tab">3. Restore</label>
 
           <div class="phase-panel" data-phase="1">
             <p class="phase-kicker" style="color:var(--pink);">INTERRUPT DETECTED</p>
             <p class="phase-title" style="color:var(--text);font-size:1.15rem;">STATE CURRENT VECTOR</p>
-            <p class="phase-hint">( What were you doing? )</p>
+            <p class="phase-hint">( What were you doing? Type it, or attach a photo. )</p>
             <p class="phase-input">Reading a book...</p>
             <span class="watch-btn cut-watch-btn phase-btn">LOCK VECTOR</span>
           </div>
@@ -1286,18 +1094,45 @@
           </div>
         </fieldset>
 
+        <div class="focus-demo cut-panel" role="img" aria-label="FOCUS setting demo: escape difficulty set to Standard, meaning the back button asks you to confirm before skipping the capture or action screen.">
+          <p class="focus-demo-label">FOCUS // ESCAPE_DIFFICULTY</p>
+          <div class="focus-demo-options" aria-hidden="true">
+            <span class="focus-opt">EASY</span>
+            <span class="focus-opt is-selected">STANDARD</span>
+            <span class="focus-opt">FIRM</span>
+          </div>
+        </div>
+
         <div class="deck-copy">
           <p>
-            When a protocol comes due and you open it, the phone asks one
-            question first: <strong>what were you doing?</strong> A short
-            free-text note, before you're allowed to mark the action done.
+            When a protocol comes due and you respond to it, the phone
+            treats the alert as an interruption of whatever you were
+            already doing, captures that, and hands it back to you
+            afterward — state your current vector, by typing it or
+            attaching a photo, before the action screen unlocks, with that
+            captured note or photo still visible while you complete it.
           </p>
           <p>
-            Once you confirm, it shows a "system optimized" screen that hands
-            the exact thing you typed back to you before returning to the
-            dashboard. It's built around getting pulled out of a task by a
-            bodily need, not just clearing a reminder — the app tries to make
-            sure you land back where you actually were.
+            How hard it is to back out without finishing is your own
+            call. The <strong>FOCUS</strong> setting above dials it from
+            <strong>EASY</strong> (back exits immediately) through
+            <strong>STANDARD</strong> (back asks you to confirm skipping
+            first) to <strong>FIRM</strong> (back does nothing — finish it
+            or explicitly abandon it). It's a dial, not a fixed behavior:
+            steering your own follow-through is the point, not the app
+            deciding for you.
+          </p>
+          <p>
+            Once you open the app to respond, an ongoing notification
+            tracks the alert and what you typed — surviving the app being
+            killed, tapping it resumes you exactly where you left off,
+            photo included. It only clears when the protocol is actually
+            completed; escaping never dismisses it. And because either
+            device can finish a protocol, a watch tap mid-capture
+            fast-forwards the phone screen instead of leaving a stale
+            confirm button up, and a watch action taken while briefly
+            disconnected is queued and retried rather than silently
+            dropped.
           </p>
         </div>
       </div>
@@ -1511,11 +1346,19 @@
         <p class="dash-header-sub">NO PLAY STORE LISTING — GITHUB IS THE ONLY CHANNEL</p>
 
         <div class="sys-notice">
-          <strong>Status:</strong> release APKs are in progress. Until
-          they're published to GitHub Releases, build from source with
-          Gradle below.
+          <strong>Status:</strong> <code>v1.0-beta.1</code> is out.
+          Download the APK for your device below, or build from source
+          with Gradle.
         </div>
 
+        <!-- Direct-download links are pinned to this specific release's
+             asset filenames (they carry the version in the name), so
+             they WILL go stale the moment a new release ships under a
+             different tag -- update both hrefs (and the sys-notice/badge
+             version strings above and below) then, or switch to naming
+             future assets identically release over release so
+             /releases/latest/download/<name> can be used instead and
+             never need touching again. -->
         <div class="deck-copy">
           <h3>VITALITYMOBILE — phone app</h3>
           <p>
@@ -1523,6 +1366,9 @@
             pain/symptom logging, and PDF report export. Package
             <code>com.snakesan.vitalitysys</code>.
           </p>
+          <div class="about-links">
+            <a class="btn cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS/releases/download/v1.0-beta.1/VITALITYSYS-Mobile-v1-0-beta-1.apk">Download APK — v1.0-beta.1</a>
+          </div>
 
           <h3>VITALITYDECK — Wear OS app</h3>
           <p>
@@ -1531,6 +1377,9 @@
             decks. Package <code>com.snakesan.vitalitysys</code> (Wear
             module).
           </p>
+          <div class="about-links">
+            <a class="btn cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS/releases/download/v1.0-beta.1/VITALITYSYS-Wear-v1-0-beta-1.apk">Download APK — v1.0-beta.1</a>
+          </div>
 
           <h3>Requirements</h3>
           <p>
@@ -1541,7 +1390,7 @@
           </p>
 
           <div class="about-links">
-            <a class="btn cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS/releases">View Releases</a>
+            <a class="btn btn-ghost cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS/releases">All Releases</a>
             <a class="btn btn-ghost cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS">Build from Source</a>
           </div>
         </div>
@@ -1594,272 +1443,11 @@
     });
   });
 
-  /* ============================================================
-     Immersive layout controller. Classic (the default, everything
-     above) is the real content in document order -- this only adds
-     an "is-active" class (and a transform during transitions) to
-     whichever single .deck should currently fill the screen. Nothing
-     here removes content from the DOM, so turning immersive off (or
-     the early <script> never having added the class, i.e. no JS)
-     always leaves the plain scrolling page intact underneath. */
-  var root = document.documentElement;
-  var decks = Array.prototype.slice.call(document.querySelectorAll('.deck'));
-  var toggle = document.getElementById('immersiveToggle');
-  var prevBtn = document.getElementById('immersivePrev');
-  var nextBtn = document.getElementById('immersiveNext');
-  var indicator = document.getElementById('immersiveIndicator');
-  var liveRegion = document.getElementById('immersiveLiveRegion');
-  var currentIndex = 0;
-  var hasActivated = false;
-
-  function reduceMotion() {
-    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  }
-
-  function pad2(n) { return (n < 10 ? '0' : '') + n; }
-
-  function updateChrome(announce) {
-    if (indicator) indicator.textContent = pad2(currentIndex + 1) + ' / ' + pad2(decks.length);
-    if (prevBtn) prevBtn.disabled = currentIndex === 0;
-    if (nextBtn) nextBtn.disabled = currentIndex === decks.length - 1;
-    if (liveRegion && announce) {
-      var heading = decks[currentIndex].querySelector('h1, h2');
-      liveRegion.textContent = 'Deck ' + (currentIndex + 1) + ' of ' + decks.length +
-        (heading ? ': ' + heading.textContent.trim() : '');
-    }
-  }
-
-  function focusDeckHeading(deck) {
-    var heading = deck.querySelector('h1, h2');
-    if (!heading) return;
-    if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
-    heading.focus({ preventScroll: true });
-  }
-
-  function clearTransitionState(deck) {
-    deck.classList.remove('is-sliding');
-    deck.style.transform = '';
-  }
-
-  function activateInitial(index) {
-    currentIndex = Math.max(0, Math.min(decks.length - 1, index));
-    decks[currentIndex].classList.add('is-active');
-    updateChrome(false);
-    hasActivated = true;
-  }
-
-  function goToDeck(newIndex) {
-    newIndex = Math.max(0, Math.min(decks.length - 1, newIndex));
-    if (newIndex === currentIndex || !hasActivated) return;
-    var direction = newIndex > currentIndex ? 1 : -1;
-    var oldDeck = decks[currentIndex];
-    var newDeck = decks[newIndex];
-
-    oldDeck.classList.add('is-active');
-    newDeck.classList.add('is-active');
-
-    if (reduceMotion()) {
-      clearTransitionState(oldDeck);
-      oldDeck.classList.remove('is-active');
-      currentIndex = newIndex;
-      updateChrome(true);
-      focusDeckHeading(newDeck);
-      return;
-    }
-
-    newDeck.style.transform = 'translateX(' + (direction * 100) + '%)';
-    oldDeck.style.transform = 'translateX(0)';
-    void newDeck.offsetWidth; // force layout so the starting position above isn't skipped
-
-    oldDeck.classList.add('is-sliding');
-    newDeck.classList.add('is-sliding');
-    oldDeck.style.transform = 'translateX(' + (-direction * 100) + '%)';
-    newDeck.style.transform = 'translateX(0)';
-
-    var done = false;
-    function finish() {
-      if (done) return;
-      done = true;
-      newDeck.removeEventListener('transitionend', finish);
-      clearTransitionState(oldDeck);
-      clearTransitionState(newDeck);
-      oldDeck.classList.remove('is-active');
-    }
-    newDeck.addEventListener('transitionend', finish);
-    setTimeout(finish, 500); // safety net if transitionend never fires
-
-    currentIndex = newIndex;
-    updateChrome(true);
-    focusDeckHeading(newDeck);
-  }
-
-  function findScrolledDeck() {
-    var mid = window.innerHeight / 2;
-    var best = 0, bestDist = Infinity;
-    decks.forEach(function (d, i) {
-      var rect = d.getBoundingClientRect();
-      var dist = Math.abs((rect.top + rect.height / 2) - mid);
-      if (dist < bestDist) { bestDist = dist; best = i; }
+  if (deckSelect) {
+    document.querySelectorAll('.deck-select-menu a').forEach(function (a) {
+      a.addEventListener('click', function () { deckSelect.open = false; });
     });
-    return best;
   }
-
-  function startingIndex() {
-    if (location.hash) {
-      var found = -1;
-      decks.forEach(function (d, i) { if ('#' + d.id === location.hash) found = i; });
-      if (found !== -1) return found;
-    }
-    return 0;
-  }
-
-  function setImmersive(on, fromUserToggle) {
-    root.classList.toggle('immersive', on);
-    try { localStorage.setItem('vitalitysys-layout', on ? 'immersive' : 'classic'); } catch (e) {}
-    if (toggle) toggle.checked = on;
-    if (on) {
-      if (!hasActivated) {
-        activateInitial(startingIndex());
-      } else if (fromUserToggle) {
-        activateInitial(findScrolledDeck());
-      }
-    } else {
-      decks.forEach(function (d) {
-        clearTransitionState(d);
-        d.classList.remove('is-active');
-      });
-      hasActivated = false;
-    }
-  }
-
-  if (toggle) {
-    var startsImmersive = root.classList.contains('immersive');
-    toggle.checked = startsImmersive;
-    if (startsImmersive) activateInitial(startingIndex());
-    toggle.addEventListener('change', function () { setImmersive(toggle.checked, true); });
-  }
-
-  if (prevBtn) prevBtn.addEventListener('click', function () { goToDeck(currentIndex - 1); });
-  if (nextBtn) nextBtn.addEventListener('click', function () { goToDeck(currentIndex + 1); });
-
-  document.addEventListener('keydown', function (e) {
-    if (!root.classList.contains('immersive')) return;
-    var tag = document.activeElement ? document.activeElement.tagName : '';
-    if (tag === 'INPUT' || tag === 'TEXTAREA') return; // let the interrupt-capture phase radios own their own arrow keys
-    if (e.key === 'ArrowRight') goToDeck(currentIndex + 1);
-    else if (e.key === 'ArrowLeft') goToDeck(currentIndex - 1);
-  });
-
-  document.querySelectorAll('.deck-select-menu a').forEach(function (a) {
-    a.addEventListener('click', function (e) {
-      if (!root.classList.contains('immersive')) return; // Classic mode: let the native anchor jump happen
-      e.preventDefault();
-      var targetId = a.getAttribute('href').slice(1);
-      var idx = -1;
-      decks.forEach(function (d, i) { if (d.id === targetId) idx = i; });
-      if (idx !== -1) goToDeck(idx);
-      if (deckSelect) deckSelect.open = false;
-    });
-  });
-
-  /* Pointer-based horizontal swipe, hardened for real touch devices.
-     Three things a synthetic mouse-drag test never exposed actually
-     broke this on a real phone:
-       1. With no explicit pointerId tracking, a second stray contact
-          (a palm, a second finger) firing its own pointerdown could
-          overwrite the in-progress drag's start position mid-gesture.
-       2. Without CSS touch-action restricting the browser's own
-          gesture handling, iOS/Android's OWN edge-swipe navigation
-          can win the touch stream before this code ever sees a clean
-          drag -- plausibly explaining "only moves one way": a
-          rightward swipe near the screen edge is exactly the same
-          gesture as the OS's own back-navigation swipe. touch-action:
-          pan-y on .phone-frame (set in CSS above) tells the browser
-          to leave horizontal movement to this handler.
-       3. Most of a deck's own touchable surface (a protocol card, the
-          SYSTEM BRIEF bar, the DIAGNOSTICS bar) IS a <button> -- an
-          earlier version of this code refused to start tracking a
-          drag that began on any button/link/input at all, which
-          meant a swipe starting anywhere over one of those (i.e.
-          most of the screen on several decks) never registered as a
-          drag in the first place. Fixed by always starting to track
-          on pointerdown regardless of target, and only deciding
-          "this is a drag, not a tap" once real horizontal movement
-          crosses a threshold -- at that point pointer capture moves
-          to the deck and the click that would otherwise follow on
-          the button underneath is explicitly suppressed, so a swipe
-          over a card never also toggles it open, and a plain tap
-          (no meaningful movement) still clicks the button normally. */
-  var dragPointerId = null, dragStartX = 0, dragStartY = 0, dragAxis = null, dragDeck = null, dragEl = null;
-  var suppressNextClick = false;
-  var SWIPE_THRESHOLD = 60;
-
-  document.addEventListener('pointerdown', function (e) {
-    if (!root.classList.contains('immersive') || !hasActivated) return;
-    if (dragPointerId !== null) return; // already tracking a different contact
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    var deck = e.target.closest ? e.target.closest('.deck.is-active') : null;
-    if (!deck) return;
-    dragPointerId = e.pointerId;
-    dragStartX = e.clientX; dragStartY = e.clientY; dragAxis = null;
-    dragDeck = decks[currentIndex];
-    dragEl = deck;
-  });
-
-  document.addEventListener('pointermove', function (e) {
-    if (e.pointerId !== dragPointerId) return;
-    var dx = e.clientX - dragStartX, dy = e.clientY - dragStartY;
-    if (!dragAxis) {
-      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
-      dragAxis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
-      if (dragAxis === 'x') {
-        suppressNextClick = true;
-        if (dragEl.setPointerCapture) {
-          try { dragEl.setPointerCapture(dragPointerId); } catch (err) {}
-        }
-      }
-    }
-    if (dragAxis !== 'x') return; // vertical intent: leave it to native scrolling
-    e.preventDefault();
-    if ((currentIndex === 0 && dx > 0) || (currentIndex === decks.length - 1 && dx < 0)) dx *= 0.35;
-    dragDeck.style.transform = 'translateX(' + dx + 'px)';
-  }, { passive: false });
-
-  function endDrag(e) {
-    if (e.pointerId !== dragPointerId) return;
-    var dx = e.clientX - dragStartX;
-    var wasDragging = dragAxis === 'x';
-    if (dragEl && dragEl.hasPointerCapture && dragEl.hasPointerCapture(dragPointerId)) {
-      dragEl.releasePointerCapture(dragPointerId);
-    }
-    dragPointerId = null; dragAxis = null;
-    if (!wasDragging) return;
-    dragDeck.style.transform = '';
-    if (dx <= -SWIPE_THRESHOLD) goToDeck(currentIndex + 1);
-    else if (dx >= SWIPE_THRESHOLD) goToDeck(currentIndex - 1);
-    // A real drag isn't reliably followed by a browser-generated click on
-    // whatever it started over (often none fires at all) -- so the flag
-    // can't rely on a click to consume it, or it would stay stuck true
-    // forever after the first swipe and silently eat every tap after it.
-    // A same-tick click (if the browser does fire one) is still caught
-    // first, since that runs before this queued reset does.
-    setTimeout(function () { suppressNextClick = false; }, 0);
-  }
-  document.addEventListener('pointerup', endDrag);
-  document.addEventListener('pointercancel', function (e) {
-    if (e.pointerId !== dragPointerId) return;
-    dragPointerId = null; dragAxis = null;
-    if (dragDeck) dragDeck.style.transform = '';
-  });
-
-  // A confirmed drag (real horizontal movement) must never also fire
-  // the click on whatever button/card it started over.
-  document.addEventListener('click', function (e) {
-    if (!suppressNextClick) return;
-    suppressNextClick = false;
-    e.preventDefault();
-    e.stopPropagation();
-  }, true);
 })();
 </script>
 

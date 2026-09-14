@@ -25,14 +25,38 @@ doesn't have.
   ```
   curl "https://api.indexnow.org/indexnow?url=https://aspdesignlabs.github.io/VITALITYSYS/&key=<the-key>"
   ```
+- **Google Search Console** and **Bing Webmaster Tools** verification
+  meta tags (`google-site-verification`, `msvalidate.01`) are in
+  `index.html`'s `<head>`, from the project owner's own accounts. Still
+  worth doing from inside each dashboard once this deploys: submit
+  `sitemap.xml` (both), and Bing Webmaster can import verification
+  straight from an existing Search Console property if that's easier.
+- X/Twitter card hardening: the OG image URL now carries a `?v=2`
+  cache-buster (X caches a card by the exact image URL, sometimes
+  indefinitely after a first failed fetch — bump this number any time
+  `og-card.png`/`.jpg` actually changes), added `og:image:type` +
+  `og:image:secure_url`, and X specifically gets a flattened
+  `og-card.jpg` (no alpha channel) via `twitter:image` instead of the
+  PNG, since X has a documented history of being flakier with
+  alpha-channel PNGs even when they're fully opaque. `twitter:site` /
+  `twitter:creator` are set to `@Snakesan`.
 
 ## Still needs the project owner
 
-These require an account this session doesn't have access to:
-
-1. **Google Search Console** — verify the site (either drop their
-   provided `<meta name="google-site-verification">` tag into
-   `index.html`'s `<head>`, or add a DNS TXT record), then submit
-   `sitemap.xml` from within Search Console.
-2. **Bing Webmaster Tools** — same idea; Bing Webmaster can also import
-   verification straight from an existing Search Console property.
+1. **Force a re-crawl on platforms that cached a stale/broken card
+   before `og-card.png` existed** — Facebook's Sharing Debugger and
+   LinkedIn's Post Inspector both need to be run interactively (they're
+   the closest thing either platform has to X's now-retired Card
+   Validator). X itself has no equivalent button anymore; the `?v=2`
+   cache-buster above plus sharing a fresh URL is the workaround.
+2. **No `robots.txt`/`sitemap.xml` at the true host root.** Crawlers
+   that check `https://aspdesignlabs.github.io/robots.txt` (the actual
+   spec-defined location) get GitHub's "there isn't a Pages site here"
+   404 — this project's own `robots.txt`/`sitemap.xml` only exist at
+   `.../VITALITYSYS/...`, one path level down, which most crawlers never
+   look at. A 404 is usually read as "allow everything" so it's not
+   necessarily blocking anything today, but there's no sitemap being
+   found at the host root either way. Fixing it for real means an
+   `ASPDesignLabs.github.io` user/org Pages repo — a separate site, and
+   a bigger structural decision than this repo's own landing page, so
+   left for the project owner to decide rather than done unasked.
