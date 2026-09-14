@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Text
+import com.snakesan.vitalitysys.BuildConfig
 import com.snakesan.vitalitysys.debug.DebugFlags
 import com.snakesan.vitalitysys.debug.forceRunSentinel
 import kotlinx.coroutines.launch
@@ -188,7 +189,9 @@ fun VitalityDeckUI(activity: MainActivity) {
         // rest of the top strip still navigates as before.
         // Long-press toggles debug mode (see debug/DebugFlags.kt) — off by
         // default, so a normal long-press elsewhere (e.g. the log button)
-        // never accidentally fires a test alert.
+        // never accidentally fires a test alert. Gated behind
+        // BuildConfig.DEBUG (mirroring the phone's DebugPanel) so debug mode
+        // can't be switched on at all from a release build.
         val debugContext = LocalContext.current
         Text(
             text = if(isPainMode) "DIAGNOSTIC" else "PROT: ${Protocol.values()[activity.activeDeckIndex].label}",
@@ -200,6 +203,7 @@ fun VitalityDeckUI(activity: MainActivity) {
                 .combinedClickable(
                     onClick = {},
                     onLongClick = {
+                        if (!BuildConfig.DEBUG) return@combinedClickable
                         val nowEnabled = DebugFlags.toggle(debugContext)
                         vibrateAck(activity, heavy = true)
                         Toast.makeText(
@@ -374,7 +378,8 @@ fun HydrationMonitor(currentMl: Int, targetMl: Int, activeStartHour: Int, active
     val startMins = activeStartHour * 60
     val endMins = activeEndHour * 60
     
-    val timeProgress = if(currentMins < startMins) 0f else ((currentMins - startMins).toFloat() / (endMins - startMins).toFloat()).coerceIn(0f, 1f)
+    val totalMins = endMins - startMins
+    val timeProgress = if (currentMins < startMins || totalMins <= 0) 0f else ((currentMins - startMins).toFloat() / totalMins.toFloat()).coerceIn(0f, 1f)
     val actualProgress = (currentMl.toFloat() / targetMl.toFloat()).coerceIn(0f, 1f)
     val isDrifting = timeProgress > actualProgress + 0.2f
 

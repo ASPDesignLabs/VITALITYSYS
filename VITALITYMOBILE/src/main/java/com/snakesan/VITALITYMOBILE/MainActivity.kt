@@ -124,6 +124,9 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             try { SysConfig.fromJson(org.json.JSONObject(it)) } catch (e: Exception) { null }
         } ?: SysConfig.DEFAULT
         applyConfig(storedConfig)
+        // HeartbeatWorker (background) shares this same key so it can derive
+        // the same overcharge value the Activity would while backgrounded.
+        overchargeStartTime = prefs.getLong("overcharge_start", 0L)
 
         db = VitalityDatabase.getDatabase(this)
 
@@ -265,6 +268,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         currentHP = finalHp.toFloat()
 
         // --- NEW OVERCHARGE LOGIC ---
+        val previousOverchargeStart = overchargeStartTime
         if (finalHp == 100) {
             if (overchargeStartTime == 0L) {
                 overchargeStartTime = System.currentTimeMillis()
@@ -276,6 +280,13 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             // Glass Cannon: Instantly shatter momentum
             overchargeStartTime = 0L
             currentOvercharge = 0
+        }
+
+        // Persist so HeartbeatWorker (background) can derive the same
+        // overcharge value the Activity would, instead of always seeing 0.
+        if (overchargeStartTime != previousOverchargeStart) {
+            getSharedPreferences("vitality_config", Context.MODE_PRIVATE).edit()
+                .putLong("overcharge_start", overchargeStartTime).apply()
         }
 
         broadcastHpToOverseer(currentHP)

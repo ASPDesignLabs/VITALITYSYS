@@ -11,7 +11,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.wear.compose.material.MaterialTheme
 import androidx.work.*
 import com.google.android.gms.tasks.Tasks
@@ -99,13 +101,20 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         broadcastToOverseerLocal()
 
         lifecycleScope.launch {
-            while (isActive) {
-                // Run the math and broadcast to the Watch Face
-                broadcastToOverseerLocal()
+            // repeatOnLifecycle suspends this while the watch face/app is
+            // backgrounded and resumes when it's active again — without it
+            // this loop kept ticking (compute + Data Layer send) every
+            // minute indefinitely, draining battery on the watch even with
+            // the screen off, redundant with the 15-minute SentinelWorker.
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (isActive) {
+                    // Run the math and broadcast to the Watch Face
+                    broadcastToOverseerLocal()
 
-                // Delay for 1 minute (60,000 ms) before calculating the next DoT tick
-                // This provides a smooth, consistent drop in HP without draining the battery
-                delay(60000L)
+                    // Delay for 1 minute (60,000 ms) before calculating the next DoT tick
+                    // This provides a smooth, consistent drop in HP without draining the battery
+                    delay(60000L)
+                }
             }
         }
 
@@ -283,9 +292,8 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         }
         store.setLastTime(protocol, now)
 
+        // broadcastToOverseerLocal() already ends with pushStateToDataLayer()
         broadcastToOverseerLocal()
-        pushStateToDataLayer()
-
 
         val event = TelemetryEvent(protocol.id, now, itemKey)
         Wearable.getNodeClient(this).connectedNodes.addOnSuccessListener { nodes -> nodes.forEach { Wearable.getMessageClient(this).sendMessage(it.id, "/sys/telemetry", event.toBytes()) } }
@@ -321,15 +329,19 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             if (logs.isEmpty()) return@launch
             try {
                 val nodes = Tasks.await(Wearable.getNodeClient(this@MainActivity).connectedNodes)
-                if (nodes.isEmpty()) return@launch 
-                nodes.forEach { node ->
-                    logs.forEach { (timestamp, level) ->
-                        val buffer = ByteBuffer.allocate(12); buffer.putInt(level); buffer.putLong(timestamp)
+                if (nodes.isEmpty()) return@launch
+                logs.forEach { (timestamp, level) ->
+                    val buffer = ByteBuffer.allocate(12); buffer.putInt(level); buffer.putLong(timestamp)
+                    nodes.forEach { node ->
                         Tasks.await(Wearable.getMessageClient(this@MainActivity).sendMessage(node.id, "/sys/pain_log", buffer.array()))
-                        delay(50) 
+                        delay(50)
                     }
+                    // Only drop this one log once every node has it — if a
+                    // send fails partway through, this (and anything after
+                    // it) simply stays queued for the next flush, instead of
+                    // resending logs that already made it across.
+                    store.removePendingPainLog(timestamp, level)
                 }
-                store.clearPendingPainLogs()
             } catch (e: Exception) { e.printStackTrace() }
         }
     }

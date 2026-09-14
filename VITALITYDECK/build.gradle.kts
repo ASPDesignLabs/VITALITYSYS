@@ -25,6 +25,13 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    buildFeatures {
+        // Needed for BuildConfig.DEBUG, which gates the debug/testing tools
+        // (see debug/DebugTools.kt and WatchComponents.kt's long-press
+        // handlers) so they only exist in debug builds — mirrors the phone
+        // module's build.gradle.kts.
+        buildConfig = true
+    }
 }
 
 dependencies {

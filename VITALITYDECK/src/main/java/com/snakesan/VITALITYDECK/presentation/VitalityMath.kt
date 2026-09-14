@@ -81,9 +81,12 @@ object VitalityMath {
         var hydroDamage = 0
         val startMins = config.activeStartHour.toInt() * 60
         val endMins = config.activeEndHour.toInt() * 60
+        val totalActive = endMins - startMins
 
-        if (currentMins in startMins..endMins) {
-            val totalActive = endMins - startMins
+        // totalActive <= 0 means the active window is zero-width or
+        // inverted (e.g. start == end) — treat hydration tracking as off
+        // for now instead of dividing by zero.
+        if (totalActive > 0 && currentMins in startMins..endMins) {
             val elapsedActive = currentMins - startMins
 
             // Integer approximation of expected progress
@@ -126,7 +129,7 @@ object VitalityMath {
         // --- CALCULATE SUB-STATUSES FOR OVERSEER HUD ---
         val hydStatus = when {
             hydroDamage > 0 -> 0 // 0 = DRY / DRIFTING
-            currentMins in startMins..endMins && (hydrationCount * 250) > ((config.hydrationTargetMl.toInt() * (currentMins - startMins)) / (endMins - startMins)) + 500 -> 2 // 2 = SATURATED
+            totalActive > 0 && currentMins in startMins..endMins && (hydrationCount * 250) > ((config.hydrationTargetMl.toInt() * (currentMins - startMins)) / totalActive) + 500 -> 2 // 2 = SATURATED
             else -> 1 // 1 = NORMAL
         }
 
