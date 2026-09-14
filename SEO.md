@@ -38,20 +38,18 @@ doesn't have.
   `og:image:secure_url`, and X specifically gets a flattened
   `og-card.jpg` (no alpha channel) via `twitter:image` instead of the
   PNG, since X has a documented history of being flakier with
-  alpha-channel PNGs even when they're fully opaque.
+  alpha-channel PNGs even when they're fully opaque. `twitter:site` /
+  `twitter:creator` are set to `@Snakesan`.
 
 ## Still needs the project owner
 
-1. **`twitter:site` / `twitter:creator`** — X-specific tags naming the
-   account behind the card. Needs the actual X handle; not added since
-   guessing one and tagging the wrong account is worse than omitting it.
-2. **Force a re-crawl on platforms that cached a stale/broken card
+1. **Force a re-crawl on platforms that cached a stale/broken card
    before `og-card.png` existed** — Facebook's Sharing Debugger and
    LinkedIn's Post Inspector both need to be run interactively (they're
    the closest thing either platform has to X's now-retired Card
    Validator). X itself has no equivalent button anymore; the `?v=2`
    cache-buster above plus sharing a fresh URL is the workaround.
-3. **No `robots.txt`/`sitemap.xml` at the true host root.** Crawlers
+2. **No `robots.txt`/`sitemap.xml` at the true host root.** Crawlers
    that check `https://aspdesignlabs.github.io/robots.txt` (the actual
    spec-defined location) get GitHub's "there isn't a Pages site here"
    404 — this project's own `robots.txt`/`sitemap.xml` only exist at
