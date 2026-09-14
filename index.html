@@ -19,7 +19,7 @@
 <meta name="twitter:image" content="https://aspdesignlabs.github.io/VITALITYSYS/assets/social/og-card.png">
 <meta name="twitter:image:alt" content="VITALITY.SYS logo — a neon pink EKG trace on a black grid — beside the text VITALITY.SYS.">
 
-<noscript><style>.accordion-panel[hidden] { display: block !important; }</style></noscript>
+<noscript><style>.reveal-panel[hidden] { display: block !important; }</style></noscript>
 
 <style>
   :root {
@@ -36,7 +36,7 @@
     --amber: #ff9900;  /* MAINTENANCE protocol / warning */
     --font-display: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
     --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --cut-sm: 10px 2px 2px 10px;   /* VitalityShape: topStart topEnd bottomEnd bottomStart, see below */
+    --statusbar-h: 44px;
   }
 
   * { box-sizing: border-box; }
@@ -128,137 +128,12 @@
       0 100%, 0 10px
     );
   }
-
-  .wrap {
-    max-width: 860px;
-    margin: 0 auto;
-    padding: 2.5rem 1.25rem;
+  /* CutCornerShape(bottomEnd 12) -- VitalityUI.kt's DiagnosticModule header
+     bar (single corner cut, used on the SYSTEM BRIEF reveal below). */
+  .cut-diag {
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%);
   }
 
-  .eyebrow {
-    font-family: var(--font-display);
-    text-transform: uppercase;
-    letter-spacing: 0.15em;
-    color: var(--text-faint);
-    font-size: 0.75rem;
-    font-weight: 700;
-    margin: 0 0 0.5rem;
-  }
-
-  /* --- Nav --- */
-  nav.top {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: rgba(5, 5, 5, 0.92);
-    backdrop-filter: blur(6px);
-    border-bottom: 1px solid var(--border);
-  }
-  .nav-inner {
-    max-width: 1000px;
-    margin: 0 auto;
-    display: flex;
-    align-items: center;
-    gap: 1.5rem;
-    flex-wrap: wrap;
-    padding: 0.75rem 1.25rem;
-  }
-  .nav-brand {
-    font-family: var(--font-display);
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    color: var(--cyan);
-    text-decoration: none;
-    font-size: 1rem;
-    white-space: nowrap;
-  }
-  .nav-brand:hover { color: var(--cyan); text-decoration: underline; }
-  .nav-groups {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.6rem;
-  }
-  details.nav-pill { position: relative; }
-  details.nav-pill > summary {
-    list-style: none;
-    cursor: pointer;
-    font-family: var(--font-display);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: var(--text-dim);
-    background: var(--graphite);
-    border: 1px solid var(--border);
-    padding: 0.5rem 0.9rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    clip-path: polygon(0 6px, 6px 0, 100% 0, 100% 100%, calc(100% - 6px) 100%, 0 100%);
-  }
-  details.nav-pill > summary::-webkit-details-marker { display: none; }
-  details.nav-pill > summary::marker { content: ""; }
-  details.nav-pill[open] > summary { color: var(--green); border-color: var(--green); }
-  details.nav-pill > summary .car { transition: transform 0.15s ease; display: inline-block; }
-  details.nav-pill[open] > summary .car { transform: rotate(180deg); }
-  .nav-dropdown {
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    min-width: 230px;
-    background: var(--graphite);
-    border: 1px solid var(--cyan);
-    box-shadow: 0 20px 40px rgba(0,0,0,0.6);
-    padding: 0.4rem 0;
-    z-index: 20;
-  }
-  .nav-dropdown a {
-    display: block;
-    padding: 0.6rem 1rem;
-    color: var(--text-dim);
-    text-decoration: none;
-    font-size: 0.9rem;
-  }
-  .nav-dropdown a:hover, .nav-dropdown a:focus-visible { color: var(--cyan); background: rgba(0,243,255,0.06); }
-
-  /* --- Hero --- */
-  .hero {
-    text-align: center;
-    padding-top: 3.5rem;
-  }
-  .hero-mark {
-    width: 84px;
-    height: 84px;
-    margin: 0 auto 1.25rem;
-    display: block;
-  }
-  .hero h1 {
-    font-size: clamp(1.8rem, 5vw, 2.75rem);
-    letter-spacing: 0.08em;
-    color: var(--text);
-    margin: 0 0 0.5rem;
-  }
-  .hero h1 .dot { color: var(--pink); }
-  .hero .tagline {
-    font-size: clamp(1rem, 2.4vw, 1.25rem);
-    color: var(--cyan);
-    font-family: var(--font-display);
-    font-weight: 700;
-    max-width: 40ch;
-    margin: 0 auto 1.25rem;
-  }
-  .hero p.lede {
-    max-width: 56ch;
-    margin: 0 auto 1.75rem;
-    color: var(--text-dim);
-  }
-  .hero-ctas {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-    flex-wrap: wrap;
-    margin-bottom: 1rem;
-  }
   .btn {
     display: inline-block;
     font-family: var(--font-display);
@@ -280,120 +155,143 @@
   }
   .btn.btn-ghost:hover, .btn.btn-ghost:focus-visible { border-color: var(--text-dim); color: var(--text); }
 
-  /* --- Status banner --- */
-  .banner {
-    max-width: 860px;
-    margin: 0 auto 2.5rem;
+  blockquote {
+    margin: 1.25rem 0;
     padding: 1rem 1.25rem;
-    border: 1px solid var(--amber);
-    background: rgba(255,153,0,0.06);
+    border-left: 3px solid var(--pink);
+    background: var(--graphite-2);
     color: var(--text);
-    font-size: 0.9rem;
+    font-style: normal;
   }
-  .banner strong { color: var(--amber); font-family: var(--font-display); }
-
-  /* --- Sections --- */
-  section.wrap h2 {
-    font-size: 1.5rem;
-    letter-spacing: 0.04em;
-    color: var(--text);
-    margin: 0 0 0.75rem;
-  }
-  section.wrap > p { color: var(--text-dim); }
-
-  .accordion-toggle {
-    all: unset;
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.6rem;
-    width: 100%;
-    cursor: pointer;
-    font: inherit;
-    color: inherit;
-  }
-  .accordion-toggle h2 { margin: 0; }
-  .accordion-toggle:hover h2 { color: var(--cyan); }
-  .accordion-toggle:focus-visible { outline: 3px solid var(--green); outline-offset: 4px; }
-  .accordion-toggle .chevron {
-    font-family: var(--font-display);
-    color: var(--text-faint);
-    transition: transform 0.15s ease;
-    flex: none;
-  }
-  .accordion-toggle[aria-expanded="true"] .chevron { transform: rotate(180deg); color: var(--cyan); }
-  .accordion-panel { padding-top: 1.25rem; }
-
-  /* --- Cards --- */
-  .card {
-    background: var(--graphite);
-    border: 1px solid var(--border);
-    padding: 1.25rem;
-    margin-bottom: 1rem;
-  }
-  .card h3 {
-    font-size: 1rem;
-    letter-spacing: 0.05em;
-    margin: 0 0 0.4rem;
-  }
-  .card p { margin: 0; color: var(--text-dim); font-size: 0.95rem; }
-  .protocol-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 1rem;
-    margin: 1.5rem 0;
-  }
-  .protocol-card { border-left-width: 3px; border-left-style: solid; }
-  .protocol-card .proto-label {
-    font-family: var(--font-display);
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    font-size: 0.85rem;
-    margin-bottom: 0.5rem;
+  blockquote cite {
     display: block;
+    margin-top: 0.6rem;
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    color: var(--text-faint);
+    font-style: normal;
   }
-  .p-nutrient { border-left-color: var(--cyan); }
-  .p-nutrient .proto-label { color: var(--cyan); }
-  .p-chemistry { border-left-color: var(--pink); }
-  .p-chemistry .proto-label { color: var(--pink); }
-  .p-hydration { border-left-color: var(--green); }
-  .p-hydration .proto-label { color: var(--green); }
-  .p-maintenance { border-left-color: var(--amber); }
-  .p-maintenance .proto-label { color: var(--amber); }
+  code {
+    font-family: var(--font-display);
+    background: var(--graphite-2);
+    padding: 0.1em 0.4em;
+    border: 1px solid var(--border);
+    font-size: 0.85em;
+    color: var(--green);
+  }
+  ul.feature-list { padding-left: 1.2rem; margin: 0.75rem 0; }
+  ul.feature-list li { margin-bottom: 0.6rem; }
+  ul.feature-list strong { color: var(--text); }
+
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
 
   /* ============================================================
-     Dashboard preview -- a faithful CSS/SVG recreation of the phone
-     app's own VitalityDashboard: header, BioFluxMonitor status
-     monitor, and the four protocol cards. Pure CSS/SVG, no JS: it
-     works with scripting off, and the page's existing global
-     prefers-reduced-motion rule (top of this stylesheet) already
-     collapses every animation below to its resting frame with no
-     extra code needed here.
+     Status bar -- persistent chrome, styled as the phone's own
+     Android status bar (clock + battery) rather than a website nav
+     ribbon. The only functional control in it is the DECKS menu,
+     a single native <details> disclosure -- not a row of pills. */
+  .statusbar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    height: var(--statusbar-h);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0.9rem;
+    background: var(--void);
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+  }
+  .statusbar-clock { color: var(--text-dim); letter-spacing: 0.05em; }
+  .statusbar-right { display: flex; align-items: center; gap: 0.75rem; }
 
-     Every looping animation is authored so its 0% and 100% keyframes
-     both equal the calm "SYSTEM OPTIMAL" resting state, and the
-     un-animated base value on each element is that same resting
-     state -- so whichever frame reduced-motion (or no-JS/no-CSS-
-     animation-support) leaves things on, it's always the calm one,
-     never mid-"EMERGENCY". --------------------------------------- */
+  /* --- Immersive/Classic layout toggle, a real checkbox styled as a
+     switch (native semantics, keyboard/AT support for free). Always
+     visible in the status bar, in both layout modes. --- */
+  .immersive-toggle { display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; min-height: 44px; padding: 4px; }
+  .immersive-toggle input {
+    position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0;
+  }
+  .immersive-toggle-track {
+    position: relative;
+    width: 30px; height: 16px; flex: none;
+    border: 1px solid var(--border);
+    background: transparent;
+    clip-path: polygon(4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px), 0 4px);
+  }
+  .immersive-toggle-track::after {
+    content: "";
+    position: absolute; top: 2px; left: 2px; width: 10px; height: 10px;
+    background: var(--text-faint);
+  }
+  .immersive-toggle input:checked + .immersive-toggle-track { border-color: var(--cyan); background: rgba(0,243,255,0.12); }
+  .immersive-toggle input:checked + .immersive-toggle-track::after { background: var(--cyan); transform: translateX(14px); }
+  .immersive-toggle input:focus-visible + .immersive-toggle-track { outline: 3px solid var(--green); outline-offset: 2px; }
+  .immersive-toggle-label { font-size: 0.6rem; font-weight: 700; color: var(--text-dim); letter-spacing: 0.04em; }
+  .immersive-toggle input:checked ~ .immersive-toggle-label { color: var(--cyan); }
+  .statusbar-battery { width: 22px; height: 11px; color: var(--text-dim); }
 
-  .dash-wrap { margin-top: 3rem; }
-  .dash-eyebrow {
+  details.deck-select { position: relative; }
+  details.deck-select > summary {
+    list-style: none;
+    cursor: pointer;
+    color: var(--cyan);
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-height: 44px;
+    padding: 4px 2px;
+  }
+  details.deck-select > summary::-webkit-details-marker { display: none; }
+  details.deck-select > summary::marker { content: ""; }
+  details.deck-select[open] > summary { color: var(--green); }
+  details.deck-select > summary .car { transition: transform 0.15s ease; display: inline-block; }
+  details.deck-select[open] > summary .car { transform: rotate(180deg); }
+  .deck-select-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 220px;
+    background: var(--graphite);
+    border: 1px solid var(--cyan);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+    padding: 0.4rem 0;
+    z-index: 20;
+  }
+  .deck-select-menu a {
+    display: block;
+    padding: 0.6rem 1rem;
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 0.8rem;
+  }
+  .deck-select-menu a:hover, .deck-select-menu a:focus-visible { color: var(--cyan); background: rgba(0,243,255,0.06); }
+
+  /* ============================================================
+     Decks -- each is one recreated app screen. A small meta label
+     above each frame identifies which deck it is (page furniture,
+     not app content); everything inside the frame is the real thing. */
+  .deck {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem;
+  }
+  .deck-eyebrow {
     text-align: center;
     font-family: var(--font-display);
     text-transform: uppercase;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.2em;
     color: var(--text-faint);
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 700;
     margin: 0 0 1rem;
-  }
-  .dash-caption {
-    max-width: 46ch;
-    margin: 1.25rem auto 0;
-    color: var(--text-faint);
-    font-size: 0.8rem;
-    text-align: center;
   }
 
   .phone-frame {
@@ -429,8 +327,30 @@
     letter-spacing: 0.15em;
     margin: 0.2rem 0 0.9rem;
   }
+  .phone-lede {
+    text-align: left;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    margin: 0.9rem 0;
+  }
 
-  /* --- BioFluxMonitor recreation --- */
+  /* An in-app-style notice strip (the app's own amber "warning" tone),
+     standing in for a plain website banner -- still inside the screen. */
+  .sys-notice {
+    text-align: left;
+    background: rgba(255,153,0,0.08);
+    border: 1px solid var(--amber);
+    padding: 0.6rem 0.75rem;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin: 0 0 0.9rem;
+  }
+  .sys-notice strong { color: var(--amber); font-family: var(--font-display); }
+  .sys-notice a { color: var(--amber); }
+
+  /* --- BioFluxMonitor recreation (illustrative demo; role="img" below
+     removes its animated internals from the accessibility tree so a
+     screen reader doesn't read all five stacked status strings at once). --- */
   .biomonitor { text-align: left; }
   .bio-head {
     display: flex;
@@ -468,7 +388,6 @@
     opacity: 0;
     color: var(--green);
   }
-  /* Resting/base state: only the OPTIMAL line shown, before any animation runs. */
   .bio-head-status .st-optimal { opacity: 1; }
   .bio-head-status .st-warning { color: var(--amber); }
   .bio-head-status .st-critical,
@@ -482,13 +401,10 @@
       linear-gradient(var(--border) 1px, transparent 1px) 0 0 / 40px 40px,
       linear-gradient(90deg, var(--border) 1px, transparent 1px) 0 0 / 40px 40px,
       var(--void);
-    background-blend-mode: normal, normal, normal;
-    opacity: 1;
     border: 1px solid rgba(0,255,65,0.5);
     overflow: hidden;
   }
   .bio-screen::before {
-    /* Grid dims to a faint ember tint, matching activeGridColor in-app. */
     content: "";
     position: absolute;
     inset: 0;
@@ -499,7 +415,6 @@
     inset: 0;
     width: 100%;
     height: 100%;
-    /* CRT-style edge fade, matching BioFluxMonitor's horizontalGradient fades. */
     -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%);
             mask-image: linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%);
   }
@@ -567,12 +482,15 @@
     background: var(--cyan);
   }
 
-  /* Narrative cycle: the whole loop is authored as one story --
-     OPTIMAL builds the shield, MAX OVERCHARGE inverts the screen as a
-     reward, then an instant reset and a slide through WARNING /
-     CRITICAL / EMERGENCY demonstrates the app's own HP status ladder
-     (the exact strings are the app's real ones, from BioFluxMonitor.kt)
-     before recovering back to OPTIMAL where the loop began. */
+  /* Narrative cycle: OPTIMAL builds the shield, MAX OVERCHARGE inverts the
+     screen as a reward, then an instant reset and a slide through
+     WARNING / CRITICAL / EMERGENCY demonstrates the app's own HP status
+     ladder (the exact strings are the app's real ones, from
+     BioFluxMonitor.kt) before recovering back to OPTIMAL. Every property's
+     0%/100% keyframe equals this same calm resting state, and the
+     un-animated base value on each element is that same state -- so
+     whichever frame reduced-motion (or no CSS-animation support) leaves
+     things on, it's always the calm one, never mid-"EMERGENCY". */
   @media (prefers-reduced-motion: no-preference) {
     .bio-head-status .st-optimal    { animation: stOptimal 30s linear infinite; }
     .bio-head-status .st-overcharge { animation: stOvercharge 30s linear infinite; }
@@ -592,7 +510,7 @@
 
   @keyframes bioTraceColor {
     0%,15%   { color: var(--green); }
-    16%,29%  { color: var(--void); }   /* inverted: dark trace on pink screen */
+    16%,29%  { color: var(--void); }
     31%,49%  { color: var(--amber); }
     51%,84%  { color: var(--pink); }
     85%,100% { color: var(--green); }
@@ -612,19 +530,65 @@
     100%   { width: 0%; }
   }
 
-  /* --- Protocol mini-cards --- */
-  .mini-protocols { margin-top: 14px; text-align: left; }
-  .mini-card {
+  /* --- Generic reveal (DiagnosticModule-style tap-to-expand bar), shared
+     by SYSTEM BRIEF and, further down, the protocol cards. --- */
+  .reveal-btn { all: unset; display: block; width: 100%; cursor: pointer; font: inherit; color: inherit; }
+  .reveal-btn:focus-visible { outline: 3px solid var(--green); outline-offset: 2px; }
+  .reveal-panel { padding-top: 0.9rem; }
+  .reveal-chevron { display: inline-block; transition: transform 0.15s ease; }
+  [aria-expanded="true"] .reveal-chevron { transform: rotate(180deg); }
+
+  .brief-toggle-row { margin-top: 12px; }
+  .brief-toggle {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    background: rgba(128,128,128,0.15);
+    border: 1px solid transparent;
+  }
+  .brief-toggle[aria-expanded="true"] { background: rgba(255,0,85,0.15); }
+  .brief-toggle-text {
+    font-family: var(--font-display);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+  }
+  .brief-toggle[aria-expanded="true"] .brief-toggle-text { color: var(--pink); }
+  .brief-panel {
+    text-align: left;
+    background: var(--graphite-2);
+    padding: 1rem;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 0.85rem;
+  }
+  .brief-panel p { margin: 0 0 0.9rem; }
+  .brief-panel .tagline {
+    font-family: var(--font-display);
+    color: var(--cyan);
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+  .brief-panel strong { color: var(--text); }
+  .brief-panel a { color: var(--cyan); }
+
+  /* --- Protocol cards (Deck 02): the app's own VitalityShape cut-corner
+     card, header always visible, body an accessible reveal in place of
+     the real card's config-slider area. --- */
+  .pcard {
     background: var(--graphite);
     border: 1px solid var(--border);
-    padding: 10px 12px;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
+    text-align: left;
   }
-  .mini-card.mp-nutrient    { border-color: var(--cyan); }
-  .mini-card.mp-chemistry   { border-color: var(--pink); }
-  .mini-card.mp-hydration   { border-color: var(--green); }
-  .mini-card.mp-maintenance { border-color: var(--amber); }
-  .mp-top {
+  .pcard.mp-nutrient    { border-color: var(--cyan); }
+  .pcard.mp-chemistry   { border-color: var(--pink); }
+  .pcard.mp-hydration   { border-color: var(--green); }
+  .pcard.mp-maintenance { border-color: var(--amber); }
+  .pcard-toggle { padding: 10px 12px; }
+  .pcard-top {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -640,31 +604,31 @@
   .mp-chemistry .mp-label   { color: var(--pink); }
   .mp-hydration .mp-label   { color: var(--green); }
   .mp-maintenance .mp-label { color: var(--amber); }
-  .mp-bar {
-    width: 56px;
-    height: 5px;
-    background: #000;
-    flex: none;
-  }
-  .mp-bar-fill { height: 100%; }
+  .mp-bar { width: 56px; height: 5px; background: #000; flex: none; display: inline-block; }
+  .mp-bar-fill { height: 100%; display: block; }
   .mp-nutrient .mp-bar-fill    { background: var(--cyan); }
   .mp-chemistry .mp-bar-fill   { background: var(--pink); }
   .mp-hydration .mp-bar-fill   { background: var(--green); }
   .mp-maintenance .mp-bar-fill { background: var(--amber); }
   .mp-stat {
-    margin: 4px 0 0;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin: 6px 0 0;
     color: var(--text);
     font-weight: 700;
     font-size: 0.95rem;
   }
-  .mp-stat span { color: var(--text-dim); font-weight: 400; font-size: 0.8rem; }
-
-  /* --- Watch deck mockup --- */
-  .watch-mockup-row {
-    display: flex;
-    justify-content: center;
-    margin: 1.5rem 0;
+  .mp-stat span:first-of-type { color: var(--text-dim); font-weight: 400; font-size: 0.8rem; }
+  .pcard-body {
+    padding: 0 12px 12px;
+    border-top: 1px solid var(--border);
+    margin-top: 2px;
   }
+  .pcard-body p { margin: 0.75rem 0 0; color: var(--text-dim); font-size: 0.85rem; }
+
+  /* --- Watch deck mockup (used from Deck 06 onward) --- */
+  .watch-mockup-row { display: flex; justify-content: center; margin: 1.5rem 0; }
   .watch-frame {
     position: relative;
     width: 220px;
@@ -680,938 +644,975 @@
     justify-content: center;
     text-align: center;
   }
-  .watch-scanline {
-    position: absolute;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: var(--cyan);
-    opacity: 0.12;
-    top: 0;
-  }
+  .watch-scanline { position: absolute; left: 0; right: 0; height: 2px; background: var(--cyan); opacity: 0.12; top: 0; }
   @media (prefers-reduced-motion: no-preference) {
     .watch-scanline { animation: watchScan 4s linear infinite; }
   }
-  @keyframes watchScan {
-    0%   { top: 0; }
-    100% { top: 100%; }
-  }
-  .watch-chevron {
-    font-family: var(--font-display);
-    color: var(--cyan);
-    opacity: 0.6;
-    font-size: 0.7rem;
-    line-height: 1;
-  }
+  @keyframes watchScan { 0% { top: 0; } 100% { top: 100%; } }
+  .watch-chevron { font-family: var(--font-display); color: var(--cyan); opacity: 0.6; font-size: 0.7rem; line-height: 1; }
   .watch-chevron.top { position: absolute; top: 14px; }
   .watch-chevron.bottom { position: absolute; bottom: 14px; }
   .watch-label {
-    font-family: var(--font-display);
-    color: var(--cyan);
-    font-size: 0.55rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    position: absolute;
-    top: 30px;
+    font-family: var(--font-display); color: var(--cyan); font-size: 0.55rem; font-weight: 800;
+    letter-spacing: 0.08em; position: absolute; top: 30px;
   }
-  .watch-stat-label {
-    font-family: var(--font-display);
-    color: var(--text-faint);
-    font-size: 0.5rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    margin: 0 0 2px;
-  }
-  .watch-stat-value {
-    font-family: var(--font-display);
-    color: var(--cyan);
-    font-size: 1.7rem;
-    font-weight: 800;
-    line-height: 1;
-    margin: 0;
-  }
+  .watch-stat-label { font-family: var(--font-display); color: var(--text-faint); font-size: 0.5rem; font-weight: 700; letter-spacing: 0.08em; margin: 0 0 2px; }
+  .watch-stat-value { font-family: var(--font-display); color: var(--cyan); font-size: 1.7rem; font-weight: 800; line-height: 1; margin: 0; }
   .watch-stat-value span { color: var(--text-faint); font-size: 0.9rem; font-weight: 700; }
   .watch-btn {
-    margin-top: 10px;
-    font-family: var(--font-display);
-    color: var(--cyan);
-    font-size: 0.6rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    padding: 6px 14px;
-    background: rgba(0,243,255,0.12);
-    border: 1px solid var(--cyan);
+    margin-top: 10px; font-family: var(--font-display); color: var(--cyan); font-size: 0.6rem; font-weight: 700;
+    letter-spacing: 0.04em; padding: 6px 14px; background: rgba(0,243,255,0.12); border: 1px solid var(--cyan);
   }
-  .watch-dots {
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
+  .watch-dots { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 4px; }
   .watch-dots span { width: 4px; height: 4px; background: var(--border); display: block; }
   .watch-dots span.active { width: 5px; height: 5px; background: var(--cyan); }
-
-  blockquote {
-    margin: 1.25rem 0;
-    padding: 1rem 1.25rem;
-    border-left: 3px solid var(--pink);
-    background: var(--graphite);
-    color: var(--text);
-    font-style: normal;
-  }
-  blockquote cite {
-    display: block;
-    margin-top: 0.6rem;
-    font-family: var(--font-display);
-    font-size: 0.75rem;
+  .watch-pain-desc { font-family: var(--font-display); color: var(--text-faint); font-size: 0.5rem; font-weight: 700; margin-top: 2px; }
+  .watch-caption {
+    text-align: center;
     color: var(--text-faint);
-    font-style: normal;
+    font-size: 0.75rem;
+    max-width: 46ch;
+    margin: 0.75rem auto 0;
   }
+  .deck-copy { text-align: left; color: var(--text-dim); font-size: 0.85rem; max-width: 46ch; margin: 1.25rem auto 0; }
+  .deck-copy p { margin: 0 0 0.85rem; }
 
-  code, .kbd {
+  /* --- Interrupt Capture: a fieldset of radio "phase tabs" (native,
+     no JS) stepping through the app's own InterruptionOverlay phases. --- */
+  .phase-fieldset { border: 0; margin: 1rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+  .phase-radio { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .phase-tab {
+    flex: 1;
+    text-align: center;
+    padding: 8px 4px;
     font-family: var(--font-display);
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+    background: var(--graphite);
+    border: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .phase-radio:checked + .phase-tab { color: var(--void); background: var(--cyan); border-color: var(--cyan); }
+  .phase-radio:focus-visible + .phase-tab { outline: 3px solid var(--green); outline-offset: 2px; }
+  .phase-panel {
+    display: none;
+    flex-basis: 100%;
+    text-align: center;
+    padding: 20px 14px;
     background: var(--graphite-2);
-    padding: 0.1em 0.4em;
-    border: 1px solid var(--border);
-    font-size: 0.85em;
-    color: var(--green);
+    margin-top: 8px;
+    min-height: 150px;
   }
-
-  ul.feature-list { padding-left: 1.2rem; color: var(--text-dim); }
-  ul.feature-list li { margin-bottom: 0.5rem; }
-  ul.feature-list strong { color: var(--text); }
-
-  /* --- Screenshot thumbnails / lightbox --- */
-  .shot-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    margin: 1.5rem 0;
-  }
-  .shot-thumb {
-    all: unset;
-    cursor: pointer;
-    position: relative;
-    width: 130px;
-    height: 230px;
-    background: repeating-linear-gradient(45deg, var(--graphite), var(--graphite) 10px, var(--graphite-2) 10px, var(--graphite-2) 20px);
-    border: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-faint);
-    text-align: center;
-    font-size: 0.7rem;
+  #phase1:checked ~ [data-phase="1"] { display: block; }
+  #phase2:checked ~ [data-phase="2"] { display: block; }
+  #phase3:checked ~ [data-phase="3"] { display: block; }
+  .phase-kicker { font-family: var(--font-display); font-size: 0.65rem; font-weight: 700; letter-spacing: 0.1em; margin: 0 0 0.75rem; color: var(--text-faint); }
+  .phase-title { font-family: var(--font-display); font-weight: 800; margin: 0 0 0.5rem; }
+  .phase-hint { color: var(--text-faint); font-size: 0.75rem; margin: 0 0 1rem; }
+  .phase-input {
+    text-align: left;
+    color: var(--cyan);
     font-family: var(--font-display);
-    padding: 0.5rem;
-  }
-  .shot-thumb.shot-square { width: 150px; height: 150px; }
-  .shot-thumb:hover, .shot-thumb:focus-visible { border-color: var(--cyan); color: var(--cyan); }
-  .shot-thumb-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-  .shot-thumb svg { width: 22px; height: 22px; margin-bottom: 0.4rem; }
-  .shot-thumb .shot-caption { display: block; }
-
-  dialog.shot-dialog {
+    font-weight: 700;
     border: 1px solid var(--cyan);
-    background: var(--void);
-    color: var(--text);
-    padding: 0;
-    width: min(92vw, 640px);
-    max-height: 88vh;
-    overflow-y: auto;
+    padding: 10px;
+    margin-bottom: 1rem;
   }
-  dialog.shot-dialog::backdrop { background: rgba(0,0,0,0.75); }
-  .shot-dialog-close {
-    all: unset;
-    position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-    cursor: pointer;
-    color: var(--text-dim);
-    background: var(--graphite);
-    border: 1px solid var(--border);
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 5;
+  .phase-btn { display: inline-block; }
+
+  /* --- Reports & Audits: static demo of the export controls --- */
+  .export-demo { margin-top: 12px; text-align: left; }
+  .export-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .export-toggle {
+    width: 34px; height: 18px; border: 1px solid var(--cyan);
+    background: rgba(0,243,255,0.12); position: relative; flex: none;
   }
-  .shot-dialog-close:hover, .shot-dialog-close:focus-visible { color: var(--pink); border-color: var(--pink); }
-  .shot-stage {
-    position: relative;
-    width: 100%;
-    height: 60vh;
-    max-height: 500px;
-    overflow: hidden;
-    background: var(--graphite);
-    touch-action: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  .export-toggle::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; background: var(--cyan);
   }
-  .shot-stage-placeholder {
-    color: var(--text-faint);
-    font-family: var(--font-display);
-    font-size: 0.9rem;
-    text-align: center;
-    padding: 1rem;
+  .export-label { font-family: var(--font-display); font-size: 0.7rem; font-weight: 700; color: var(--cyan); }
+  .export-range {
+    display: flex; justify-content: space-between; border: 1px solid var(--text-faint);
+    padding: 8px 10px; font-family: var(--font-display); font-size: 0.65rem;
   }
-  .shot-image {
-    max-width: 100%;
-    max-height: 100%;
-    user-select: none;
-    -webkit-user-drag: none;
-    cursor: grab;
-  }
-  .shot-controls {
-    display: flex;
-    gap: 0.5rem;
-    justify-content: center;
-    padding: 0.75rem;
-    border-top: 1px solid var(--border);
-  }
-  .shot-controls button {
-    font-family: var(--font-display);
-    background: var(--graphite);
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    min-width: 44px;
-    min-height: 44px;
-    cursor: pointer;
-  }
-  .shot-controls button:hover, .shot-controls button:focus-visible { color: var(--cyan); border-color: var(--cyan); }
-  .shot-hint {
-    text-align: center;
-    color: var(--text-faint);
-    font-size: 0.75rem;
-    padding: 0 1rem 1rem;
-    margin: 0;
+  .export-range span:first-child { color: var(--text-faint); }
+  .export-range span:last-child { color: var(--cyan); font-weight: 700; }
+  .pdf-btn {
+    display: block; text-align: center; margin-top: 10px; padding: 10px;
+    font-family: var(--font-display); font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em;
+    color: var(--cyan); background: rgba(0,243,255,0.12); border: 2px solid var(--cyan);
   }
 
-  /* --- Footer --- */
-  footer {
-    border-top: 1px solid var(--border);
-    padding: 2.5rem 1.25rem 3rem;
-    text-align: center;
-    color: var(--text-faint);
+  /* --- Privacy: the app's own PrivacyRationaleActivity screen --- */
+  .privacy-quote {
+    text-align: left;
+    margin: 1rem 0;
+    padding: 1rem;
+    border-left: 3px solid var(--pink);
+    background: var(--graphite-2);
+    color: var(--text);
     font-size: 0.85rem;
   }
-  footer .foot-links {
-    display: flex;
-    gap: 1.5rem;
-    justify-content: center;
-    flex-wrap: wrap;
-    margin-bottom: 1rem;
-    font-family: var(--font-display);
-  }
-  footer a { color: var(--text-dim); text-decoration: underline; }
-  footer a:hover, footer a:focus-visible { color: var(--cyan); }
+  .privacy-quote cite { display: block; margin-top: 0.6rem; font-family: var(--font-display); font-size: 0.65rem; color: var(--text-faint); font-style: normal; }
 
-  @media (max-width: 480px) {
-    .shot-thumb { width: 110px; height: 195px; }
+  /* --- About / Source --- */
+  .about-links { display: flex; flex-direction: column; gap: 0.6rem; margin: 1rem 0; }
+  .about-links .btn { text-align: center; }
+  .deck-copy h3 { font-family: var(--font-display); color: var(--text); font-size: 0.85rem; margin: 1.25rem 0 0.5rem; }
+  .deck-copy h3:first-child { margin-top: 0; }
+
+  /* ============================================================
+     Immersive layout -- an alternative presentation of the exact
+     same deck markup above, not a duplicate. Classic (the default
+     CSS, everything above this block) stays the real fallback: with
+     JS disabled, html never gets the "immersive" class, none of the
+     rules below ever match, and the page is precisely today's
+     scrolling document. Toggled via #immersiveToggle in the status
+     bar, persisted to localStorage; see the <script> blocks for the
+     controller. --------------------------------------------------- */
+
+  .immersive-nav, .immersive-indicator { display: none; }
+  html.immersive .immersive-nav { display: flex; }
+  html.immersive .immersive-indicator { display: block; }
+
+  .immersive-nav {
+    /* Keeps the full 44x44 touch target for accessibility, but stays
+       visually light (no filled box) so it reads as a floating edge
+       affordance instead of a panel that occludes the scrollable
+       content it sits over. */
+    position: fixed;
+    top: calc(50% + var(--statusbar-h) / 2);
+    transform: translateY(-50%);
+    z-index: 30;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: transparent;
+    border: none;
+    color: var(--cyan);
+    font-size: 1.3rem;
+    text-shadow: 0 0 5px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95);
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+  }
+  .immersive-nav:hover, .immersive-nav:focus-visible { opacity: 1; }
+  .immersive-nav:focus-visible { outline: 3px solid var(--green); outline-offset: 2px; }
+  .immersive-nav[disabled] { opacity: 0.15; cursor: default; pointer-events: none; }
+  .immersive-nav-prev { left: 8px; }
+  .immersive-nav-next { right: 8px; }
+
+  .immersive-indicator {
+    position: fixed;
+    top: calc(var(--statusbar-h) + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+    font-family: var(--font-display);
+    font-size: 0.65rem;
+    color: var(--text-faint);
+    background: rgba(5,5,5,0.75);
+    padding: 3px 10px;
+    border: 1px solid var(--border);
+  }
+
+  /* Lock exactly one deck's own phone-frame full-screen at a time,
+     9:16, as large as the viewport (minus the status bar) allows. */
+  html.immersive .deck { display: none; }
+  html.immersive .deck.is-active {
+    display: flex;
+    position: fixed;
+    top: var(--statusbar-h);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    background: #000;
+    z-index: 20;
+  }
+  html.immersive .deck.is-active .deck-eyebrow { display: none; }
+  html.immersive .phone-frame {
+    height: min(100%, calc((100vw) * 16 / 9));
+    width: min(100%, calc((100vh - var(--statusbar-h)) * 9 / 16));
+    margin: 0;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  html.immersive .phone-screen {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    html.immersive .deck.is-sliding { transition: transform 0.32s ease; }
   }
 </style>
 
 <a class="skip-link" href="#main">Skip to main content</a>
 
-<nav class="top" aria-label="Section navigation">
-  <div class="nav-inner">
-    <a class="nav-brand" href="#main">VITALITY.SYS</a>
-    <div class="nav-groups">
-      <details class="nav-pill">
-        <summary>System <span class="car" aria-hidden="true">&#9662;</span></summary>
-        <div class="nav-dropdown">
-          <a href="#how-it-works">How it works</a>
-          <a href="#protocols">Protocols</a>
-          <a href="#interrupt-capture">Interrupt capture</a>
-        </div>
-      </details>
-      <details class="nav-pill">
-        <summary>Tracking <span class="car" aria-hidden="true">&#9662;</span></summary>
-        <div class="nav-dropdown">
-          <a href="#pain-logging">Pain logging</a>
-          <a href="#reports">Reports &amp; audits</a>
-        </div>
-      </details>
-      <details class="nav-pill">
-        <summary>Project <span class="car" aria-hidden="true">&#9662;</span></summary>
-        <div class="nav-dropdown">
-          <a href="#watch-app">Watch app</a>
-          <a href="#privacy">Privacy &amp; offline</a>
-          <a href="#overseer">Overseer</a>
-          <a href="#get-it">Get it</a>
-        </div>
-      </details>
-    </div>
+<script>
+// Runs before the decks below are parsed, so the layout mode is already
+// decided by the time they render -- avoids a flash of the wrong layout.
+// Immersive is the default; only an explicit stored "classic" opts out.
+(function () {
+  var immersive = true;
+  try { immersive = localStorage.getItem('vitalitysys-layout') !== 'classic'; } catch (e) {}
+  if (immersive) document.documentElement.classList.add('immersive');
+})();
+</script>
+
+<header class="statusbar">
+  <span class="statusbar-clock" id="statusClock" aria-hidden="true">09:41</span>
+  <div class="statusbar-right">
+    <label class="immersive-toggle">
+      <input type="checkbox" id="immersiveToggle" checked>
+      <span class="immersive-toggle-track" aria-hidden="true"></span>
+      <span class="immersive-toggle-label">Immersive</span>
+    </label>
+    <svg class="statusbar-battery" viewBox="0 0 24 12" aria-hidden="true" focusable="false">
+      <rect x="0.5" y="0.5" width="20" height="11" rx="2" ry="2" fill="none" stroke="currentColor"/>
+      <rect x="21.5" y="4" width="2" height="4" fill="currentColor"/>
+      <rect x="2" y="2" width="16" height="8" fill="currentColor"/>
+    </svg>
+    <details class="deck-select">
+      <summary>DECKS <span class="car" aria-hidden="true">&#9662;</span></summary>
+      <div class="deck-select-menu">
+        <a href="#deck-dashboard">01 Dashboard</a>
+        <a href="#deck-protocols">02 Protocols</a>
+        <a href="#deck-interrupt">03 Interrupt Capture</a>
+        <a href="#deck-pain">04 Pain Logging</a>
+        <a href="#deck-reports">05 Reports &amp; Audits</a>
+        <a href="#deck-watch">06 Watch App</a>
+        <a href="#deck-privacy">07 Privacy &amp; Offline</a>
+        <a href="#deck-about">08 About / Source</a>
+      </div>
+    </details>
   </div>
-</nav>
+</header>
+
+<button type="button" class="immersive-nav immersive-nav-prev" id="immersivePrev" aria-label="Previous deck">
+  <span aria-hidden="true">&#10094;</span>
+</button>
+<button type="button" class="immersive-nav immersive-nav-next" id="immersiveNext" aria-label="Next deck">
+  <span aria-hidden="true">&#10095;</span>
+</button>
+<div class="immersive-indicator" id="immersiveIndicator" aria-hidden="true"></div>
+<div class="visually-hidden" id="immersiveLiveRegion" aria-live="polite"></div>
 
 <main id="main">
 
-  <section class="hero wrap">
-    <svg class="hero-mark" viewBox="0 0 100 100" role="img" aria-label="VITALITY.SYS logo: a pink EKG heartbeat trace on a black grid">
-      <rect width="100" height="100" fill="#050505"/>
-      <g stroke="#2a2a2a" stroke-width="1">
-        <path d="M0 20H100M0 40H100M0 60H100M0 80H100M20 0V100M40 0V100M60 0V100M80 0V100"/>
-      </g>
-      <path d="M0 50 H30 L38 30 L46 68 L54 22 L62 60 L70 50 H100" fill="none" stroke="#4d0016" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M0 50 H30 L38 30 L46 68 L54 22 L62 60 L70 50 H100" fill="none" stroke="#ff0055" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    <h1>VITALITY<span class="dot">.</span>SYS</h1>
-    <p class="tagline">Vitals, not checklists.</p>
-    <p class="lede">
-      A phone app and a standalone Wear OS watch app that track meals,
-      hydration, medication, and hygiene as one live HP number — built to
-      make missed self-care <em>felt</em>, the way a video game makes
-      low health felt, instead of sitting quietly in a to-do list.
-    </p>
-    <div class="hero-ctas">
-      <a class="btn cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS">View on GitHub</a>
-      <a class="btn btn-ghost cut-hero-btn" href="#how-it-works">See how it works</a>
-    </div>
+  <section id="deck-dashboard" class="deck">
+    <p class="deck-eyebrow">Deck 01</p>
+    <div class="phone-frame">
+      <div class="phone-notch" aria-hidden="true"></div>
+      <div class="phone-screen">
 
-    <div class="dash-wrap">
-      <p class="dash-eyebrow">What you'll actually see</p>
-      <div class="phone-frame" aria-hidden="true">
-        <div class="phone-notch"></div>
-        <div class="phone-screen">
-          <p class="dash-header-title">VITALITY<span class="dot">.</span>SYS</p>
-          <p class="dash-header-sub">CLINICAL CONTROLLER</p>
+        <div class="sys-notice">
+          <strong>Status:</strong> actively-developed personal accessibility
+          project, built and dogfooded by one person. Not distributed on the
+          Play Store — build it from source (see <a href="#deck-about">About / Source</a>).
+        </div>
 
-          <div class="biomonitor">
-            <div class="bio-head">
-              <span class="bio-head-label">CURRENT_STATE</span>
-              <span class="bio-head-status">
-                <span class="st-optimal">SYSTEM OPTIMAL // VITALS STABLE</span>
-                <span class="st-overcharge">MAX OVERCHARGE // EDGERUNNER</span>
-                <span class="st-warning">WARNING: HOMEOSTASIS DEGRADING</span>
-                <span class="st-critical">CRITICAL ERROR: INTEGRITY FAILING</span>
-                <span class="st-emergency">EMERGENCY: SYSTEM SHUTDOWN IMMINENT</span>
-              </span>
-            </div>
-            <div class="bio-screen cut-monitor">
-              <div class="bio-trace">
-                <svg viewBox="0 0 400 100" preserveAspectRatio="none">
-                  <path d="M0,50 L120,50 L136,50 L148,35 L160,50 L172,65 L184,20 L196,80 L208,50 L220,45 L232,50 L400,50 L520,50 L536,50 L548,35 L560,50 L572,65 L584,20 L596,80 L608,50 L620,45 L632,50 L800,50" />
-                </svg>
-              </div>
-              <span class="bio-blip"></span>
-            </div>
-            <div class="bio-shield">
-              <span class="bio-shield-label">OC_SHIELD</span>
-              <div class="bio-shield-track"><div class="bio-shield-fill"></div></div>
-            </div>
+        <h1 class="dash-header-title">VITALITY<span class="dot" aria-hidden="true">.</span>SYS</h1>
+        <p class="dash-header-sub">CLINICAL CONTROLLER</p>
+
+        <div class="biomonitor" role="img" aria-label="Status monitor demo, cycling through the app's real status ladder: System Optimal, Max Overcharge, Warning, Critical, and Emergency.">
+          <div class="bio-head">
+            <span class="bio-head-label">CURRENT_STATE</span>
+            <span class="bio-head-status">
+              <span class="st-optimal">SYSTEM OPTIMAL // VITALS STABLE</span>
+              <span class="st-overcharge">MAX OVERCHARGE // EDGERUNNER</span>
+              <span class="st-warning">WARNING: HOMEOSTASIS DEGRADING</span>
+              <span class="st-critical">CRITICAL ERROR: INTEGRITY FAILING</span>
+              <span class="st-emergency">EMERGENCY: SYSTEM SHUTDOWN IMMINENT</span>
+            </span>
           </div>
-
-          <div class="mini-protocols">
-            <div class="mini-card cut-panel mp-nutrient">
-              <div class="mp-top">
-                <span class="mp-label">Nutrient</span>
-                <div class="mp-bar"><div class="mp-bar-fill" style="width:66%"></div></div>
-              </div>
-              <p class="mp-stat">2 <span>/ 3 MEALS</span></p>
+          <div class="bio-screen cut-monitor">
+            <div class="bio-trace">
+              <svg viewBox="0 0 400 100" preserveAspectRatio="none">
+                <path d="M0,50 L120,50 L136,50 L148,35 L160,50 L172,65 L184,20 L196,80 L208,50 L220,45 L232,50 L400,50 L520,50 L536,50 L548,35 L560,50 L572,65 L584,20 L596,80 L608,50 L620,45 L632,50 L800,50" />
+              </svg>
             </div>
-            <div class="mini-card cut-panel mp-chemistry">
-              <div class="mp-top">
-                <span class="mp-label">Chemistry</span>
-                <div class="mp-bar"><div class="mp-bar-fill" style="width:75%"></div></div>
-              </div>
-              <p class="mp-stat">3 <span>/ 4 DOSES</span></p>
-            </div>
-            <div class="mini-card cut-panel mp-hydration">
-              <div class="mp-top">
-                <span class="mp-label">Hydration</span>
-                <div class="mp-bar"><div class="mp-bar-fill" style="width:62%"></div></div>
-              </div>
-              <p class="mp-stat">5 <span>/ 8 DOSES</span></p>
-            </div>
-            <div class="mini-card cut-panel mp-maintenance">
-              <div class="mp-top">
-                <span class="mp-label">Maintenance</span>
-                <div class="mp-bar"><div class="mp-bar-fill" style="width:50%"></div></div>
-              </div>
-              <p class="mp-stat">1 <span>/ 2 TASKS</span></p>
-            </div>
+            <span class="bio-blip"></span>
+          </div>
+          <div class="bio-shield">
+            <span class="bio-shield-label">OC_SHIELD</span>
+            <div class="bio-shield-track"><div class="bio-shield-fill"></div></div>
           </div>
         </div>
-      </div>
-      <p class="dash-caption">
-        A direct recreation of the phone dashboard's own status monitor and
-        protocol cards — same cut-corner shapes, same protocol colors, same
-        status ladder the real app uses. The numbers above are a demo, not
-        live data.
-      </p>
-    </div>
-  </section>
 
-  <div class="banner">
-    <strong>Status:</strong> actively-developed personal accessibility
-    project, built and dogfooded by one person. Not distributed on the
-    Play Store — build it from source (see <a href="#get-it">Get it</a>).
-    Screenshots on this page are placeholders until real captures are
-    dropped in.
-  </div>
-
-  <section id="how-it-works" class="wrap">
-    <p class="eyebrow">Core mechanic</p>
-    <h2>How it works</h2>
-    <p>
-      Instead of four separate reminders you can each individually ignore,
-      VITALITY.SYS collapses meals, medication, hydration, and hygiene
-      into a single <strong>HP value from 0 to 100</strong>, recalculated
-      continuously. Each of the four areas below — the app calls them
-      <strong>protocols</strong> — can bleed HP on its own the longer it's
-      neglected: a short grace period, then a base penalty, then a steady
-      drip for every extra minute you're behind.
-    </p>
-    <p>
-      Two effects sit on top of that base math:
-    </p>
-    <ul class="feature-list">
-      <li>
-        <strong>Bio-Drift.</strong> If more than one protocol is failing
-        at the same time, the damage doesn't just add up — it compounds.
-        Letting hydration and a medication dose slide together costs more
-        than letting either slide alone, which mirrors how skipped
-        self-care actually tends to cascade.
-      </li>
-      <li>
-        <strong>Overcharge.</strong> Holding 100 HP continuously for about
-        an hour fills a second "shield" meter. It's a reward for a solid
-        stretch, and it resets instantly the moment HP drops below 100 —
-        no coasting on a good streak.
-      </li>
-    </ul>
-    <p>
-      The number is shared live between your phone and your watch over
-      Bluetooth (no server involved — see <a href="#privacy">Privacy &amp;
-      offline</a>), so the watch isn't a passive mirror of the phone. It's
-      built to be the thing you actually glance at and act on, with the
-      phone as the fuller dashboard and configuration surface.
-    </p>
-  </section>
-
-  <section id="protocols" class="wrap">
-    <h2>
-      <button type="button" class="accordion-toggle" aria-expanded="false" aria-controls="protocols-panel">
-        The four protocols
-        <span class="chevron" aria-hidden="true">&#9662;</span>
-      </button>
-    </h2>
-    <div id="protocols-panel" class="accordion-panel" hidden>
-      <p>
-        Every protocol is user-configurable — none of this is fixed
-        slots. Set as many meals, medications, dose times, and hygiene
-        tasks as you actually have.
-      </p>
-      <div class="protocol-grid">
-        <div class="card protocol-card p-nutrient">
-          <span class="proto-label">Nutrient</span>
-          <h3>Meals</h3>
+        <div class="brief-toggle-row">
+          <button type="button" class="reveal-btn brief-toggle cut-diag" aria-expanded="false" aria-controls="briefPanel">
+            <span class="brief-toggle-text" data-collapsed="SYSTEM BRIEF // TAP_TO_DECRYPT" data-expanded="SYSTEM BRIEF // ACCESSING_ARCHIVE">SYSTEM BRIEF // TAP_TO_DECRYPT</span>
+          </button>
+        </div>
+        <div id="briefPanel" class="reveal-panel brief-panel" hidden>
+          <p class="tagline">Vitals, not checklists.</p>
           <p>
-            Schedule 1–5 meal times. Logging one opens a macro-entry
-            screen — calories, protein, fat, fiber, sugar — and writes
-            the meal to Android Health Connect as a nutrition record.
+            A phone app and a standalone Wear OS watch app that track meals,
+            hydration, medication, and hygiene as one live HP number — built to
+            make missed self-care <em>felt</em>, the way a video game makes
+            low health felt, instead of sitting quietly in a to-do list.
+          </p>
+          <p>
+            Instead of four separate reminders you can each individually ignore,
+            VITALITY.SYS collapses meals, medication, hydration, and hygiene
+            into a single <strong>HP value from 0 to 100</strong>, recalculated
+            continuously. Each of the four areas below — the app calls them
+            <strong>protocols</strong> — can bleed HP on its own the longer it's
+            neglected: a short grace period, then a base penalty, then a steady
+            drip for every extra minute you're behind.
+          </p>
+          <p>Two effects sit on top of that base math:</p>
+          <ul class="feature-list">
+            <li>
+              <strong>Bio-Drift.</strong> If more than one protocol is failing
+              at the same time, the damage doesn't just add up — it compounds.
+              Letting hydration and a medication dose slide together costs more
+              than letting either slide alone, which mirrors how skipped
+              self-care actually tends to cascade.
+            </li>
+            <li>
+              <strong>Overcharge.</strong> Holding 100 HP continuously for about
+              an hour fills a second "shield" meter. It's a reward for a solid
+              stretch, and it resets instantly the moment HP drops below 100 —
+              no coasting on a good streak.
+            </li>
+          </ul>
+          <p>
+            The number is shared live between your phone and your watch over
+            Bluetooth (no server involved — see
+            <a href="#deck-privacy">Privacy &amp; offline</a>), so the watch isn't a passive mirror of the phone. It's
+            built to be the thing you actually glance at and act on, with the
+            phone as the fuller dashboard and configuration surface.
           </p>
         </div>
-        <div class="card protocol-card p-chemistry">
-          <span class="proto-label">Chemistry</span>
-          <h3>Medication</h3>
+
+      </div>
+    </div>
+  </section>
+
+  <section id="deck-protocols" class="deck">
+    <p class="deck-eyebrow">Deck 02</p>
+    <div class="phone-frame">
+      <div class="phone-notch" aria-hidden="true"></div>
+      <div class="phone-screen">
+        <h2 class="dash-header-title" style="font-size:1rem;">PROTOCOLS</h2>
+        <p class="dash-header-sub">TAP A PROTOCOL TO EXPAND</p>
+
+        <p class="phone-lede">
+          Every protocol is user-configurable — none of this is fixed
+          slots. Set as many meals, medications, dose times, and hygiene
+          tasks as you actually have. The stats below are a demo, not
+          live data.
+        </p>
+
+        <div class="pcard cut-panel mp-nutrient">
+          <button type="button" class="reveal-btn pcard-toggle" aria-expanded="false" aria-controls="pcard-nutrient-body">
+            <span class="pcard-top">
+              <span class="mp-label">Nutrient</span>
+              <span class="mp-bar"><span class="mp-bar-fill" style="width:66%"></span></span>
+            </span>
+            <span class="mp-stat">
+              <span>2 / 3 MEALS</span>
+              <span class="reveal-chevron" aria-hidden="true">&#9662;</span>
+            </span>
+          </button>
+          <div id="pcard-nutrient-body" class="reveal-panel pcard-body" hidden>
+            <p>
+              Schedule 1–5 meal times. Logging one opens a macro-entry
+              screen — calories, protein, fat, fiber, sugar — and writes
+              the meal to Android Health Connect as a nutrition record.
+            </p>
+          </div>
+        </div>
+
+        <div class="pcard cut-panel mp-chemistry">
+          <button type="button" class="reveal-btn pcard-toggle" aria-expanded="false" aria-controls="pcard-chemistry-body">
+            <span class="pcard-top">
+              <span class="mp-label">Chemistry</span>
+              <span class="mp-bar"><span class="mp-bar-fill" style="width:75%"></span></span>
+            </span>
+            <span class="mp-stat">
+              <span>3 / 4 DOSES</span>
+              <span class="reveal-chevron" aria-hidden="true">&#9662;</span>
+            </span>
+          </button>
+          <div id="pcard-chemistry-body" class="reveal-panel pcard-body" hidden>
+            <p>
+              Any number of medications, each with any number of daily
+              doses, each tracked separately. This protocol's damage curve
+              is the steepest of the four by design — missed doses matter
+              most.
+            </p>
+          </div>
+        </div>
+
+        <div class="pcard cut-panel mp-hydration">
+          <button type="button" class="reveal-btn pcard-toggle" aria-expanded="false" aria-controls="pcard-hydration-body">
+            <span class="pcard-top">
+              <span class="mp-label">Hydration</span>
+              <span class="mp-bar"><span class="mp-bar-fill" style="width:62%"></span></span>
+            </span>
+            <span class="mp-stat">
+              <span>5 / 8 DOSES</span>
+              <span class="reveal-chevron" aria-hidden="true">&#9662;</span>
+            </span>
+          </button>
+          <div id="pcard-hydration-body" class="reveal-panel pcard-body" hidden>
+            <p>
+              Each log adds a fixed 250&nbsp;mL toward a target you set,
+              paced across your own defined "active hours" window, and
+              writes a hydration record to Health Connect.
+            </p>
+          </div>
+        </div>
+
+        <div class="pcard cut-panel mp-maintenance">
+          <button type="button" class="reveal-btn pcard-toggle" aria-expanded="false" aria-controls="pcard-maintenance-body">
+            <span class="pcard-top">
+              <span class="mp-label">Maintenance</span>
+              <span class="mp-bar"><span class="mp-bar-fill" style="width:50%"></span></span>
+            </span>
+            <span class="mp-stat">
+              <span>1 / 2 TASKS</span>
+              <span class="reveal-chevron" aria-hidden="true">&#9662;</span>
+            </span>
+          </button>
+          <div id="pcard-maintenance-body" class="reveal-panel pcard-body" hidden>
+            <p>
+              Any number of your own named tasks — morning routine, evening
+              routine, or whatever you actually need reminding of — each
+              with its own scheduled time.
+            </p>
+          </div>
+        </div>
+
+        <p class="phone-lede">
+          Every protocol's action is one tap, on phone or watch. Chemistry
+          and Maintenance never show you a scrollable list of pending
+          items — just the single soonest-due one, so the watch stays a
+          quick glance instead of another list to page through.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="deck-interrupt" class="deck">
+    <p class="deck-eyebrow">Deck 03</p>
+    <div class="phone-frame">
+      <div class="phone-notch" aria-hidden="true"></div>
+      <div class="phone-screen">
+        <h2 class="dash-header-title" style="font-size:1rem;">INTERRUPT CAPTURE</h2>
+        <p class="dash-header-sub">A PROTOCOL COMES DUE</p>
+
+        <fieldset class="phase-fieldset">
+          <legend class="visually-hidden">Step through the three interrupt-capture phases</legend>
+
+          <input type="radio" name="interrupt-phase" id="phase1" class="phase-radio" checked>
+          <label for="phase1" class="phase-tab">1. Capture</label>
+          <input type="radio" name="interrupt-phase" id="phase2" class="phase-radio">
+          <label for="phase2" class="phase-tab">2. Execute</label>
+          <input type="radio" name="interrupt-phase" id="phase3" class="phase-radio">
+          <label for="phase3" class="phase-tab">3. Restore</label>
+
+          <div class="phase-panel" data-phase="1">
+            <p class="phase-kicker" style="color:var(--pink);">INTERRUPT DETECTED</p>
+            <p class="phase-title" style="color:var(--text);font-size:1.15rem;">STATE CURRENT VECTOR</p>
+            <p class="phase-hint">( What were you doing? )</p>
+            <p class="phase-input">Reading a book...</p>
+            <span class="watch-btn cut-watch-btn phase-btn">LOCK VECTOR</span>
+          </div>
+          <div class="phase-panel" data-phase="2">
+            <p class="phase-kicker">VECTOR LOCKED</p>
+            <p class="phase-title" style="color:var(--text);font-size:0.9rem;">READING A BOOK...</p>
+            <p class="phase-kicker" style="margin-top:1.5rem;color:var(--cyan);">EXECUTE PROTOCOL</p>
+            <p class="phase-title" style="color:var(--cyan);font-size:2rem;">NUTRIENT</p>
+            <span class="watch-btn cut-watch-btn phase-btn">CONFIRM COMPLETION</span>
+          </div>
+          <div class="phase-panel" data-phase="3">
+            <p class="phase-kicker" style="color:var(--green);">SYSTEM OPTIMIZED</p>
+            <p class="phase-hint">RESUMING VECTOR:</p>
+            <p class="phase-title" style="color:var(--cyan);font-size:1.4rem;">READING A BOOK...</p>
+            <span class="watch-btn cut-watch-btn phase-btn">ENGAGE</span>
+          </div>
+        </fieldset>
+
+        <div class="deck-copy">
           <p>
-            Any number of medications, each with any number of daily
-            doses, each tracked separately. This protocol's damage curve
-            is the steepest of the four by design — missed doses matter
-            most.
+            When a protocol comes due and you open it, the phone asks one
+            question first: <strong>what were you doing?</strong> A short
+            free-text note, before you're allowed to mark the action done.
+          </p>
+          <p>
+            Once you confirm, it shows a "system optimized" screen that hands
+            the exact thing you typed back to you before returning to the
+            dashboard. It's built around getting pulled out of a task by a
+            bodily need, not just clearing a reminder — the app tries to make
+            sure you land back where you actually were.
           </p>
         </div>
-        <div class="card protocol-card p-hydration">
-          <span class="proto-label">Hydration</span>
-          <h3>Fluids</h3>
+      </div>
+    </div>
+  </section>
+
+  <section id="deck-pain" class="deck">
+    <p class="deck-eyebrow">Deck 04</p>
+    <div class="phone-frame">
+      <div class="phone-notch" aria-hidden="true"></div>
+      <div class="phone-screen">
+        <h2 class="dash-header-title" style="font-size:1rem;">PAIN &amp; SYMPTOM LOGGING</h2>
+        <div class="watch-mockup-row">
+          <div class="watch-frame" role="img" aria-label="Watch pain-logging interface demo, showing a selected pain level of 6, labeled Impairing">
+            <div class="watch-scanline"></div>
+            <span class="watch-label">DIAGNOSTIC</span>
+            <p class="watch-stat-label">TAP EDGES</p>
+            <p class="watch-stat-value" style="color:var(--pink);">6</p>
+            <p class="watch-pain-desc">IMPAIRING</p>
+            <span class="watch-btn cut-watch-btn" style="color:var(--pink);border-color:var(--pink);background:rgba(255,0,85,0.12);">CONFIRM</span>
+          </div>
+        </div>
+        <p class="watch-caption">
+          A recreation of the watch's own pain-level selector — tapping the top
+          or bottom edge raises or lowers the number, 0 to 10. Demo value shown,
+          not a live reading.
+        </p>
+        <div class="deck-copy">
           <p>
-            Each log adds a fixed 250&nbsp;mL toward a target you set,
-            paced across your own defined "active hours" window, and
-            writes a hydration record to Health Connect.
+            A separate flow from the four protocols: log a symptom on a 0–10
+            scale (from <em>resolved</em> up through <em>critical</em>) with a
+            short note on location, type, and triggers — from the watch or
+            the phone.
+          </p>
+          <p>
+            Logging anything above a 3 automatically schedules a 60-minute
+            follow-up check-in, unless it's inside your configured sleep
+            window — which can itself be overridden when round-the-clock
+            monitoring is actually wanted.
           </p>
         </div>
-        <div class="card protocol-card p-maintenance">
-          <span class="proto-label">Maintenance</span>
-          <h3>Hygiene &amp; self-care</h3>
-          <p>
-            Any number of your own named tasks — morning routine, evening
-            routine, or whatever you actually need reminding of — each
-            with its own scheduled time.
-          </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="deck-reports" class="deck">
+    <p class="deck-eyebrow">Deck 05</p>
+    <div class="phone-frame">
+      <div class="phone-notch" aria-hidden="true"></div>
+      <div class="phone-screen">
+        <h2 class="dash-header-title" style="font-size:1rem;">REPORTS &amp; AUDITS</h2>
+        <p class="dash-header-sub">COMPLIANCE &amp; EXPORT</p>
+
+        <div class="brief-toggle-row">
+          <button type="button" class="reveal-btn brief-toggle cut-diag" aria-expanded="false" aria-controls="diagPanel">
+            <span class="brief-toggle-text" data-collapsed="DIAGNOSTICS // TAP_TO_DECRYPT" data-expanded="DIAGNOSTICS // ACCESSING_ARCHIVE">DIAGNOSTICS // TAP_TO_DECRYPT</span>
+          </button>
         </div>
-      </div>
-      <p>
-        Every protocol's action is one tap, on phone or watch. Chemistry
-        and Maintenance never show you a scrollable list of pending
-        items — just the single soonest-due one, so the watch stays a
-        quick glance instead of another list to page through.
-      </p>
-      <div class="shot-row">
-        <button type="button" class="shot-thumb" data-shot-name="Phone dashboard" data-shot-src="assets/screenshots/dashboard.png">
-          <span class="shot-thumb-sr">View phone dashboard screenshot, full size</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-          <span class="shot-caption">Dashboard<br>coming soon</span>
-        </button>
-        <button type="button" class="shot-thumb" data-shot-name="Nutrition macro scan" data-shot-src="assets/screenshots/nutrition-scan.png">
-          <span class="shot-thumb-sr">View nutrition macro scan screenshot, full size</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-          <span class="shot-caption">Macro scan<br>coming soon</span>
-        </button>
-      </div>
-    </div>
-  </section>
-
-  <section id="interrupt-capture" class="wrap">
-    <h2>
-      <button type="button" class="accordion-toggle" aria-expanded="false" aria-controls="interrupt-capture-panel">
-        Interrupt capture
-        <span class="chevron" aria-hidden="true">&#9662;</span>
-      </button>
-    </h2>
-    <div id="interrupt-capture-panel" class="accordion-panel" hidden>
-      <p>
-        When a protocol comes due and you open it, the phone asks one
-        question first: <strong>what were you doing?</strong> A short
-        free-text note, before you're allowed to mark the action done.
-      </p>
-      <p>
-        Once you confirm, it shows a "system optimized" screen that hands
-        the exact thing you typed back to you before returning to the
-        dashboard. It's built around getting pulled out of a task by a
-        bodily need, not just clearing a reminder — the app tries to make
-        sure you land back where you actually were.
-      </p>
-      <div class="shot-row">
-        <button type="button" class="shot-thumb" data-shot-name="Interrupt capture flow" data-shot-src="assets/screenshots/interrupt-capture.png">
-          <span class="shot-thumb-sr">View interrupt capture flow screenshot, full size</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-          <span class="shot-caption">Interrupt capture<br>coming soon</span>
-        </button>
-      </div>
-    </div>
-  </section>
-
-  <section id="pain-logging" class="wrap">
-    <h2>
-      <button type="button" class="accordion-toggle" aria-expanded="false" aria-controls="pain-logging-panel">
-        Pain &amp; symptom logging
-        <span class="chevron" aria-hidden="true">&#9662;</span>
-      </button>
-    </h2>
-    <div id="pain-logging-panel" class="accordion-panel" hidden>
-      <p>
-        A separate flow from the four protocols: log a symptom on a 0–10
-        scale (from <em>resolved</em> up through <em>critical</em>) with a
-        short note on location, type, and triggers — from the watch or
-        the phone.
-      </p>
-      <p>
-        Logging anything above a 3 automatically schedules a 60-minute
-        follow-up check-in, unless it's inside your configured sleep
-        window — which can itself be overridden when round-the-clock
-        monitoring is actually wanted.
-      </p>
-      <div class="shot-row">
-        <button type="button" class="shot-thumb shot-square" data-shot-name="Watch pain logging" data-shot-src="assets/screenshots/watch-pain.png">
-          <span class="shot-thumb-sr">View watch pain logging screenshot, full size</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-          <span class="shot-caption">Pain logging<br>coming soon</span>
-        </button>
-      </div>
-    </div>
-  </section>
-
-  <section id="reports" class="wrap">
-    <h2>
-      <button type="button" class="accordion-toggle" aria-expanded="false" aria-controls="reports-panel">
-        Reports &amp; compliance audits
-        <span class="chevron" aria-hidden="true">&#9662;</span>
-      </button>
-    </h2>
-    <div id="reports-panel" class="accordion-panel" hidden>
-      <p>
-        Every alert the system fires is tracked end to end — issued,
-        interacted with, fulfilled — and graded success / warning /
-        failure, rolled up into a per-protocol A–F compliance score.
-      </p>
-      <p>
-        From the phone you can generate a multi-page PDF report, in
-        either the app's own dark "system" theme or a plain light
-        "clinical" theme meant for sharing with a doctor or care team. It
-        covers the raw event log, 24-hour/7-day/30-day summaries,
-        per-protocol response latency, which hour of the day tends to see
-        the most abandoned alerts, and a response-time histogram — handed
-        off through the normal Android share sheet.
-      </p>
-      <div class="shot-row">
-        <button type="button" class="shot-thumb" data-shot-name="Diagnostics and export panel" data-shot-src="assets/screenshots/diagnostics-export.png">
-          <span class="shot-thumb-sr">View diagnostics and export panel screenshot, full size</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-          <span class="shot-caption">Export panel<br>coming soon</span>
-        </button>
-        <button type="button" class="shot-thumb" data-shot-name="Sample exported PDF report" data-shot-src="assets/screenshots/pdf-report.png">
-          <span class="shot-thumb-sr">View sample exported PDF report screenshot, full size</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-          <span class="shot-caption">PDF report<br>coming soon</span>
-        </button>
-      </div>
-    </div>
-  </section>
-
-  <section id="watch-app" class="wrap">
-    <h2>
-      <button type="button" class="accordion-toggle" aria-expanded="false" aria-controls="watch-app-panel">
-        The watch app
-        <span class="chevron" aria-hidden="true">&#9662;</span>
-      </button>
-    </h2>
-    <div id="watch-app-panel" class="accordion-panel" hidden>
-      <p>
-        VITALITY.SYS ships as a standalone Wear OS app — it keeps running
-        its own schedule and alerts even when the phone is out of
-        Bluetooth range, then re-syncs once it's back.
-      </p>
-      <p>
-        Navigation is built for the bezel: rotate to move between five
-        decks (one per protocol, plus pain logging), or tap the top and
-        bottom edges of the screen. Each deck shows exactly one piece of
-        live status and one action button — nothing to scroll through.
-      </p>
-
-      <div class="watch-mockup-row">
-        <div class="watch-frame" aria-hidden="true">
-          <div class="watch-scanline"></div>
-          <span class="watch-chevron top">&#9650;</span>
-          <span class="watch-label">PROT: NUTRIENT</span>
-          <p class="watch-stat-label">INTAKE LOG</p>
-          <p class="watch-stat-value">2 <span>/ 3</span></p>
-          <span class="watch-btn cut-watch-btn">LOG ENTRY</span>
-          <span class="watch-chevron bottom">&#9660;</span>
-          <div class="watch-dots">
-            <span class="active"></span><span></span><span></span><span></span><span></span>
+        <div id="diagPanel" class="reveal-panel brief-panel" hidden>
+          <p>
+            Every alert the system fires is tracked end to end — issued,
+            interacted with, fulfilled — and graded success / warning /
+            failure, rolled up into a per-protocol A–F compliance score.
+          </p>
+          <p>
+            From the phone you can generate a multi-page PDF report, in
+            either the app's own dark "system" theme or a plain light
+            "clinical" theme meant for sharing with a doctor or care team. It
+            covers the raw event log, 24-hour/7-day/30-day summaries,
+            per-protocol response latency, which hour of the day tends to see
+            the most abandoned alerts, and a response-time histogram — handed
+            off through the normal Android share sheet.
+          </p>
+          <div class="export-demo">
+            <div class="export-row">
+              <span class="export-toggle" aria-hidden="true"></span>
+              <span class="export-label">MODE: SYSTEM</span>
+            </div>
+            <div class="export-range">
+              <span>RANGE:</span>
+              <span>08/14 -&gt; 09/14</span>
+            </div>
+            <span class="pdf-btn">GENERATE PDF // SHARE</span>
           </div>
         </div>
       </div>
-      <p class="dash-caption">
-        A recreation of one deck's actual layout — the top/bottom edges are
-        real tap zones for previous/next, the dots on the right mark which
-        of the five decks is active. Demo data, not live.
-      </p>
+    </div>
+  </section>
 
-      <div class="shot-row">
-        <button type="button" class="shot-thumb shot-square" data-shot-name="Watch deck protocol view" data-shot-src="assets/screenshots/watch-deck.png">
-          <span class="shot-thumb-sr">View watch deck protocol screenshot, full size</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-          <span class="shot-caption">Watch deck<br>coming soon</span>
-        </button>
-        <button type="button" class="shot-thumb shot-square" data-shot-name="Watch rotary navigation" data-shot-src="assets/gifs/watch-rotary-nav.gif">
-          <span class="shot-thumb-sr">View watch rotary navigation recording, full size</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-          <span class="shot-caption">Rotary nav<br>coming soon</span>
-        </button>
+  <section id="deck-watch" class="deck">
+    <p class="deck-eyebrow">Deck 06</p>
+    <div class="phone-frame">
+      <div class="phone-notch" aria-hidden="true"></div>
+      <div class="phone-screen">
+        <h2 class="dash-header-title" style="font-size:1rem;">THE WATCH APP</h2>
+        <div class="watch-mockup-row">
+          <div class="watch-frame" role="img" aria-label="Watch deck demo showing the Nutrient protocol: intake log 2 of 3, with a Log Entry button, top/bottom tap zones, and pagination dots for the five decks">
+            <div class="watch-scanline"></div>
+            <span class="watch-chevron top">&#9650;</span>
+            <span class="watch-label">PROT: NUTRIENT</span>
+            <p class="watch-stat-label">INTAKE LOG</p>
+            <p class="watch-stat-value">2 <span>/ 3</span></p>
+            <span class="watch-btn cut-watch-btn">LOG ENTRY</span>
+            <span class="watch-chevron bottom">&#9660;</span>
+            <div class="watch-dots">
+              <span class="active"></span><span></span><span></span><span></span><span></span>
+            </div>
+          </div>
+        </div>
+        <p class="watch-caption">
+          A recreation of one deck's actual layout — the top/bottom edges are
+          real tap zones for previous/next, the dots on the right mark which
+          of the five decks is active. Demo data, not live.
+        </p>
+        <div class="deck-copy">
+          <p>
+            VITALITY.SYS ships as a standalone Wear OS app — it keeps running
+            its own schedule and alerts even when the phone is out of
+            Bluetooth range, then re-syncs once it's back.
+          </p>
+          <p>
+            Navigation is built for the bezel: rotate to move between five
+            decks (one per protocol, plus pain logging), or tap the top and
+            bottom edges of the screen. Each deck shows exactly one piece of
+            live status and one action button — nothing to scroll through.
+          </p>
+        </div>
       </div>
     </div>
   </section>
 
-  <section id="privacy" class="wrap">
-    <h2>
-      <button type="button" class="accordion-toggle" aria-expanded="false" aria-controls="privacy-panel">
-        Privacy &amp; offline design
-        <span class="chevron" aria-hidden="true">&#9662;</span>
-      </button>
-    </h2>
-    <div id="privacy-panel" class="accordion-panel" hidden>
-      <p>
-        Neither app requests the <code>INTERNET</code> permission, and
-        there is no networking code anywhere in either module. The only
-        channel between phone and watch is Bluetooth, and Health Connect
-        writes stay on-device. Everything else — logs, audits, daily
-        stats, your schedule — lives in a local database and
-        SharedPreferences. No accounts, no cloud sync, no analytics or
-        crash-reporting SDKs.
-      </p>
-      <blockquote>
-        "VITALITY.SYS operates on a strict self-sovereign data matrix...
-        telemetry regarding hydration and macromolecular ingestion is
-        syndicated strictly locally to your device's core repository. We
-        do not broadcast your physiological status to megacorps."
-        <cite>— the app's own Health Connect permissions screen</cite>
-      </blockquote>
-      <p>
-        The one admin/debug panel in the codebase (data resets, synthetic
-        test alerts) doesn't exist at all in a release build — it's
-        compiled out unless the APK is built as a debug variant, and even
-        then it stays off until explicitly switched on for testing.
-      </p>
+  <section id="deck-privacy" class="deck">
+    <p class="deck-eyebrow">Deck 07 // Privacy &amp; Offline</p>
+    <div class="phone-frame">
+      <div class="phone-notch" aria-hidden="true"></div>
+      <div class="phone-screen">
+        <h2 class="dash-header-title" style="font-size:0.95rem;">ADMIN // DATA_GOVERNANCE_PROTOCOL</h2>
+        <div class="deck-copy">
+          <blockquote class="privacy-quote">
+            "VITALITY.SYS operates on a strict self-sovereign data matrix...
+            telemetry regarding hydration and macromolecular ingestion is
+            syndicated strictly locally to your device's core repository. We
+            do not broadcast your physiological status to megacorps."
+            <cite>— the app's own Health Connect permissions screen</cite>
+          </blockquote>
+          <p>
+            Neither app requests the <code>INTERNET</code> permission, and
+            there is no networking code anywhere in either module. The only
+            channel between phone and watch is Bluetooth, and Health Connect
+            writes stay on-device. Everything else — logs, audits, daily
+            stats, your schedule — lives in a local database and
+            SharedPreferences. No accounts, no cloud sync, no analytics or
+            crash-reporting SDKs.
+          </p>
+          <p>
+            The one admin/debug panel in the codebase (data resets, synthetic
+            test alerts) doesn't exist at all in a release build — it's
+            compiled out unless the APK is built as a debug variant, and even
+            then it stays off until explicitly switched on for testing.
+          </p>
+        </div>
+      </div>
     </div>
   </section>
 
-  <section id="overseer" class="wrap">
-    <h2>
-      <button type="button" class="accordion-toggle" aria-expanded="false" aria-controls="overseer-panel">
-        Part of a larger system: Overseer
-        <span class="chevron" aria-hidden="true">&#9662;</span>
-      </button>
-    </h2>
-    <div id="overseer-panel" class="accordion-panel" hidden>
-      <p>
-        VITALITY.SYS doesn't run in isolation on the watch. It broadcasts
-        its live HP and status locally to a sibling project,
-        <strong>Overseer</strong>, and can be paused by it — the two are
-        designed as modules in one broader personal system rather than as
-        one all-in-one app.
-      </p>
-      <p>
-        Overseer has its own project page:
-        <a href="https://aspdesignlabs.github.io/OVERSEER">aspdesignlabs.github.io/OVERSEER</a>.
-      </p>
-    </div>
-  </section>
+  <section id="deck-about" class="deck">
+    <p class="deck-eyebrow">Deck 08</p>
+    <div class="phone-frame">
+      <div class="phone-notch" aria-hidden="true"></div>
+      <div class="phone-screen">
+        <h2 class="dash-header-title" style="font-size:0.95rem;">SYS_INFO // SOURCE_ARCHIVE</h2>
+        <div class="deck-copy">
+          <h3>Part of a larger system: Overseer</h3>
+          <p>
+            VITALITY.SYS doesn't run in isolation on the watch. It broadcasts
+            its live HP and status locally to a sibling project,
+            <strong>Overseer</strong>, and can be paused by it — the two are
+            designed as modules in one broader personal system rather than as
+            one all-in-one app.
+          </p>
+          <p>
+            Overseer has its own project page:
+            <a href="https://aspdesignlabs.github.io/OVERSEER">aspdesignlabs.github.io/OVERSEER</a>.
+          </p>
 
-  <section id="get-it" class="wrap">
-    <p class="eyebrow">Source</p>
-    <h2>Get it</h2>
-    <p>
-      There's no Play Store listing. Build it yourself from source with
-      Gradle, or watch the repo's Releases page for prebuilt APKs.
-    </p>
-    <div class="hero-ctas" style="justify-content: flex-start;">
-      <a class="btn" href="https://github.com/ASPDesignLabs/VITALITYSYS">Source on GitHub</a>
-      <a class="btn btn-ghost" href="https://github.com/ASPDesignLabs/VITALITYSYS/releases">Releases</a>
+          <h3>Get it</h3>
+          <p>
+            There's no Play Store listing. Build it yourself from source with
+            Gradle, or watch the repo's Releases page for prebuilt APKs.
+          </p>
+          <div class="about-links">
+            <a class="btn cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS">Source on GitHub</a>
+            <a class="btn btn-ghost cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS/releases">Releases</a>
+            <a class="btn btn-ghost cut-hero-btn" href="https://github.com/ASPDesignLabs/VITALITYSYS/blob/main/LICENSE">GPL-3.0 License</a>
+          </div>
+          <p style="text-align:center;font-size:0.75rem;color:var(--text-faint);">
+            VITALITY.SYS is free software, licensed GPL-3.0. No warranty,
+            personal project, built by one person for their own use.
+          </p>
+        </div>
+      </div>
     </div>
   </section>
 
 </main>
 
-<dialog class="shot-dialog" id="shotDialog" aria-label="Screenshot preview">
-  <button type="button" class="shot-dialog-close" data-shot-close aria-label="Close screenshot preview">&#10005;</button>
-  <div class="shot-stage" id="shotStage">
-    <div class="shot-stage-placeholder" id="shotPlaceholder" hidden><span id="shotPlaceholderText">Screenshot coming soon</span></div>
-    <img id="shotImage" class="shot-image" alt="" draggable="false" hidden>
-  </div>
-  <div class="shot-controls">
-    <button type="button" data-shot-zoom-out aria-label="Zoom out">&minus;</button>
-    <button type="button" data-shot-zoom-reset aria-label="Reset zoom">1:1</button>
-    <button type="button" data-shot-zoom-in aria-label="Zoom in">+</button>
-  </div>
-  <p class="shot-hint">Double-click, pinch, or scroll to zoom &middot; drag to pan while zoomed &middot; Esc to close</p>
-</dialog>
-
-<footer>
-  <div class="foot-links">
-    <a href="https://github.com/ASPDesignLabs/VITALITYSYS">GitHub</a>
-    <a href="https://github.com/ASPDesignLabs/VITALITYSYS/blob/main/LICENSE">GPL-3.0 License</a>
-    <a href="https://aspdesignlabs.github.io/OVERSEER">Overseer</a>
-  </div>
-  <p>VITALITY.SYS is free software, licensed GPL-3.0. No warranty, personal project, built by one person for their own use.</p>
-</footer>
-
 <script>
 (function () {
   "use strict";
 
-  /* --- Nav pills: mutual exclusion, outside click, Escape --- */
-  var navPills = document.querySelectorAll('details.nav-pill');
-  navPills.forEach(function (d) {
-    d.addEventListener('toggle', function () {
-      if (d.open) navPills.forEach(function (o) { if (o !== d) o.open = false; });
-    });
-  });
-  document.addEventListener('click', function (e) {
-    navPills.forEach(function (d) { if (d.open && !d.contains(e.target)) d.open = false; });
-  });
-  document.addEventListener('keydown', function (e) {
-    if (e.key !== 'Escape') return;
-    navPills.forEach(function (d) {
-      if (d.open) { d.open = false; var s = d.querySelector('summary'); if (s) s.focus(); }
-    });
-  });
+  function updateClock() {
+    var el = document.getElementById('statusClock');
+    if (!el) return;
+    var d = new Date();
+    var h = d.getHours(), m = d.getMinutes();
+    el.textContent = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+  }
+  updateClock();
+  setInterval(updateClock, 15000);
 
-  /* --- Collapsible sections --- */
+  var deckSelect = document.querySelector('details.deck-select');
+  if (deckSelect) {
+    document.addEventListener('click', function (e) {
+      if (deckSelect.open && !deckSelect.contains(e.target)) deckSelect.open = false;
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && deckSelect.open) {
+        deckSelect.open = false;
+        var s = deckSelect.querySelector('summary');
+        if (s) s.focus();
+      }
+    });
+  }
+
+  /* --- Generic reveal (DiagnosticModule-style tap-to-expand), shared by
+     SYSTEM BRIEF and the protocol cards. --- */
   function setExpanded(btn, expanded) {
     btn.setAttribute('aria-expanded', String(expanded));
     var panel = document.getElementById(btn.getAttribute('aria-controls'));
     if (panel) panel.hidden = !expanded;
+    var textEl = btn.querySelector('[data-collapsed]');
+    if (textEl) textEl.textContent = expanded ? textEl.getAttribute('data-expanded') : textEl.getAttribute('data-collapsed');
   }
-  document.querySelectorAll('.accordion-toggle').forEach(function (btn) {
+  document.querySelectorAll('.reveal-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
       setExpanded(btn, btn.getAttribute('aria-expanded') !== 'true');
     });
   });
 
-  function expandSectionById(id) {
-    var el = document.getElementById(id);
-    if (!el) return;
-    var btn = el.querySelector('.accordion-toggle');
-    if (btn && btn.getAttribute('aria-expanded') !== 'true') setExpanded(btn, true);
-  }
-  function expandFromHash() { if (location.hash) expandSectionById(location.hash.slice(1)); }
-  expandFromHash();
-  window.addEventListener('hashchange', expandFromHash);
+  /* ============================================================
+     Immersive layout controller. Classic (the default, everything
+     above) is the real content in document order -- this only adds
+     an "is-active" class (and a transform during transitions) to
+     whichever single .deck should currently fill the screen. Nothing
+     here removes content from the DOM, so turning immersive off (or
+     the early <script> never having added the class, i.e. no JS)
+     always leaves the plain scrolling page intact underneath. */
+  var root = document.documentElement;
+  var decks = Array.prototype.slice.call(document.querySelectorAll('.deck'));
+  var toggle = document.getElementById('immersiveToggle');
+  var prevBtn = document.getElementById('immersivePrev');
+  var nextBtn = document.getElementById('immersiveNext');
+  var indicator = document.getElementById('immersiveIndicator');
+  var liveRegion = document.getElementById('immersiveLiveRegion');
+  var currentIndex = 0;
+  var hasActivated = false;
 
-  document.querySelectorAll('.nav-dropdown a').forEach(function (a) {
-    a.addEventListener('click', function () {
-      expandSectionById(a.getAttribute('href').slice(1));
-      navPills.forEach(function (d) { d.open = false; });
-    });
-  });
-
-  /* --- Screenshot lightbox --- */
-  var dialog = document.getElementById('shotDialog');
-  var stage = document.getElementById('shotStage');
-  var img = document.getElementById('shotImage');
-  var placeholder = document.getElementById('shotPlaceholder');
-  var placeholderText = document.getElementById('shotPlaceholderText');
-  var lastTrigger = null;
-
-  var zoom = 1, panX = 0, panY = 0;
-  var MIN_ZOOM = 1, MAX_ZOOM = 4;
-
-  function applyTransform() {
-    img.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoom + ')';
-    img.style.cursor = zoom > 1 ? 'grab' : 'default';
+  function reduceMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 
-  function resetZoom() {
-    zoom = 1; panX = 0; panY = 0;
-    applyTransform();
-  }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
 
-  function setZoom(newZoom) {
-    zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, newZoom));
-    if (zoom === MIN_ZOOM) { panX = 0; panY = 0; } // avoid the image sitting stuck off-center at 1x
-    applyTransform();
-  }
-
-  document.querySelectorAll('.shot-thumb').forEach(function (btn) {
-    var src = btn.getAttribute('data-shot-src');
-    if (src) {
-      // Single existence probe shared by the thumbnail background and the
-      // dialog's full-size view, so a missing asset costs one failed
-      // request instead of two -- it stays a striped placeholder until a
-      // real file is dropped in (see assets/README.md).
-      var thumbProbe = new Image();
-      thumbProbe.onload = function () {
-        btn.style.backgroundImage = 'url(' + src + ')';
-        btn.style.backgroundSize = 'cover';
-        btn.style.backgroundPosition = 'center';
-      };
-      thumbProbe.src = src;
+  function updateChrome(announce) {
+    if (indicator) indicator.textContent = pad2(currentIndex + 1) + ' / ' + pad2(decks.length);
+    if (prevBtn) prevBtn.disabled = currentIndex === 0;
+    if (nextBtn) nextBtn.disabled = currentIndex === decks.length - 1;
+    if (liveRegion && announce) {
+      var heading = decks[currentIndex].querySelector('h1, h2');
+      liveRegion.textContent = 'Deck ' + (currentIndex + 1) + ' of ' + decks.length +
+        (heading ? ': ' + heading.textContent.trim() : '');
     }
-    btn.addEventListener('click', function () {
-      lastTrigger = btn;
-      var name = btn.getAttribute('data-shot-name') || 'Screenshot';
-      dialog.setAttribute('aria-label', name + ' preview');
-      resetZoom();
+  }
 
-      var probe = new Image();
-      probe.onload = function () {
-        img.src = src;
-        img.alt = name + ' screenshot';
-        img.hidden = false;
-        placeholder.hidden = true;
-      };
-      probe.onerror = function () {
-        img.hidden = true;
-        placeholder.hidden = false;
-        placeholderText.textContent = name + ' — screenshot coming soon';
-      };
-      if (src) { probe.src = src; } else { probe.onerror(); }
+  function focusDeckHeading(deck) {
+    var heading = deck.querySelector('h1, h2');
+    if (!heading) return;
+    if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+    heading.focus({ preventScroll: true });
+  }
 
-      if (typeof dialog.showModal === 'function') dialog.showModal();
-      else dialog.setAttribute('open', '');
+  function clearTransitionState(deck) {
+    deck.classList.remove('is-sliding');
+    deck.style.transform = '';
+  }
+
+  function activateInitial(index) {
+    currentIndex = Math.max(0, Math.min(decks.length - 1, index));
+    decks[currentIndex].classList.add('is-active');
+    updateChrome(false);
+    hasActivated = true;
+  }
+
+  function goToDeck(newIndex) {
+    newIndex = Math.max(0, Math.min(decks.length - 1, newIndex));
+    if (newIndex === currentIndex || !hasActivated) return;
+    var direction = newIndex > currentIndex ? 1 : -1;
+    var oldDeck = decks[currentIndex];
+    var newDeck = decks[newIndex];
+
+    oldDeck.classList.add('is-active');
+    newDeck.classList.add('is-active');
+
+    if (reduceMotion()) {
+      clearTransitionState(oldDeck);
+      oldDeck.classList.remove('is-active');
+      currentIndex = newIndex;
+      updateChrome(true);
+      focusDeckHeading(newDeck);
+      return;
+    }
+
+    newDeck.style.transform = 'translateX(' + (direction * 100) + '%)';
+    oldDeck.style.transform = 'translateX(0)';
+    void newDeck.offsetWidth; // force layout so the starting position above isn't skipped
+
+    oldDeck.classList.add('is-sliding');
+    newDeck.classList.add('is-sliding');
+    oldDeck.style.transform = 'translateX(' + (-direction * 100) + '%)';
+    newDeck.style.transform = 'translateX(0)';
+
+    var done = false;
+    function finish() {
+      if (done) return;
+      done = true;
+      newDeck.removeEventListener('transitionend', finish);
+      clearTransitionState(oldDeck);
+      clearTransitionState(newDeck);
+      oldDeck.classList.remove('is-active');
+    }
+    newDeck.addEventListener('transitionend', finish);
+    setTimeout(finish, 500); // safety net if transitionend never fires
+
+    currentIndex = newIndex;
+    updateChrome(true);
+    focusDeckHeading(newDeck);
+  }
+
+  function findScrolledDeck() {
+    var mid = window.innerHeight / 2;
+    var best = 0, bestDist = Infinity;
+    decks.forEach(function (d, i) {
+      var rect = d.getBoundingClientRect();
+      var dist = Math.abs((rect.top + rect.height / 2) - mid);
+      if (dist < bestDist) { bestDist = dist; best = i; }
+    });
+    return best;
+  }
+
+  function startingIndex() {
+    if (location.hash) {
+      var found = -1;
+      decks.forEach(function (d, i) { if ('#' + d.id === location.hash) found = i; });
+      if (found !== -1) return found;
+    }
+    return 0;
+  }
+
+  function setImmersive(on, fromUserToggle) {
+    root.classList.toggle('immersive', on);
+    try { localStorage.setItem('vitalitysys-layout', on ? 'immersive' : 'classic'); } catch (e) {}
+    if (toggle) toggle.checked = on;
+    if (on) {
+      if (!hasActivated) {
+        activateInitial(startingIndex());
+      } else if (fromUserToggle) {
+        activateInitial(findScrolledDeck());
+      }
+    } else {
+      decks.forEach(function (d) {
+        clearTransitionState(d);
+        d.classList.remove('is-active');
+      });
+      hasActivated = false;
+    }
+  }
+
+  if (toggle) {
+    var startsImmersive = root.classList.contains('immersive');
+    toggle.checked = startsImmersive;
+    if (startsImmersive) activateInitial(startingIndex());
+    toggle.addEventListener('change', function () { setImmersive(toggle.checked, true); });
+  }
+
+  if (prevBtn) prevBtn.addEventListener('click', function () { goToDeck(currentIndex - 1); });
+  if (nextBtn) nextBtn.addEventListener('click', function () { goToDeck(currentIndex + 1); });
+
+  document.addEventListener('keydown', function (e) {
+    if (!root.classList.contains('immersive')) return;
+    var tag = document.activeElement ? document.activeElement.tagName : '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return; // let the interrupt-capture phase radios own their own arrow keys
+    if (e.key === 'ArrowRight') goToDeck(currentIndex + 1);
+    else if (e.key === 'ArrowLeft') goToDeck(currentIndex - 1);
+  });
+
+  document.querySelectorAll('.deck-select-menu a').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      if (!root.classList.contains('immersive')) return; // Classic mode: let the native anchor jump happen
+      e.preventDefault();
+      var targetId = a.getAttribute('href').slice(1);
+      var idx = -1;
+      decks.forEach(function (d, i) { if (d.id === targetId) idx = i; });
+      if (idx !== -1) goToDeck(idx);
+      if (deckSelect) deckSelect.open = false;
     });
   });
 
-  function closeDialog() {
-    if (typeof dialog.close === 'function' && dialog.open) dialog.close();
-    else dialog.removeAttribute('open');
-    if (lastTrigger) { lastTrigger.focus(); lastTrigger = null; }
-  }
+  /* Pointer-based horizontal swipe. Locks to an axis only after a small
+     movement threshold, so vertical scrolling inside .phone-screen is
+     never hijacked -- only a clearly horizontal drag navigates decks. */
+  var dragStartX = null, dragStartY = null, dragAxis = null, dragDeck = null;
+  var SWIPE_THRESHOLD = 60;
 
-  dialog.querySelector('[data-shot-close]').addEventListener('click', closeDialog);
-  dialog.addEventListener('click', function (e) {
-    if (e.target === dialog) closeDialog(); // backdrop click on <dialog> itself
-  });
-  dialog.addEventListener('cancel', function (e) {
+  document.addEventListener('pointerdown', function (e) {
+    if (!root.classList.contains('immersive') || !hasActivated) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    dragStartX = e.clientX; dragStartY = e.clientY; dragAxis = null;
+    dragDeck = decks[currentIndex];
+  }, { passive: true });
+
+  document.addEventListener('pointermove', function (e) {
+    if (dragStartX === null) return;
+    var dx = e.clientX - dragStartX, dy = e.clientY - dragStartY;
+    if (!dragAxis) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      dragAxis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    }
+    if (dragAxis !== 'x') return;
     e.preventDefault();
-    closeDialog();
-  });
-
-  dialog.querySelector('[data-shot-zoom-in]').addEventListener('click', function () { setZoom(zoom + 0.5); });
-  dialog.querySelector('[data-shot-zoom-out]').addEventListener('click', function () { setZoom(zoom - 0.5); });
-  dialog.querySelector('[data-shot-zoom-reset]').addEventListener('click', resetZoom);
-
-  img.addEventListener('dblclick', function () { setZoom(zoom > 1 ? 1 : 2); });
-
-  stage.addEventListener('wheel', function (e) {
-    if (img.hidden) return;
-    e.preventDefault();
-    setZoom(zoom + (e.deltaY < 0 ? 0.25 : -0.25));
+    if ((currentIndex === 0 && dx > 0) || (currentIndex === decks.length - 1 && dx < 0)) dx *= 0.35;
+    dragDeck.style.transform = 'translateX(' + dx + 'px)';
   }, { passive: false });
 
-  /* Pointer-based drag-to-pan, plus basic two-finger pinch-to-zoom. */
-  var pointers = {};
-  var dragging = false, dragStart = { x: 0, y: 0, panX: 0, panY: 0 };
-  var pinchStartDist = 0, pinchStartZoom = 1;
-
-  function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
-
-  stage.addEventListener('pointerdown', function (e) {
-    if (img.hidden) return;
-    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
-    var ids = Object.keys(pointers);
-    if (ids.length === 1 && zoom > 1) {
-      dragging = true;
-      dragStart = { x: e.clientX, y: e.clientY, panX: panX, panY: panY };
-      img.style.cursor = 'grabbing';
-      stage.setPointerCapture(e.pointerId);
-    } else if (ids.length === 2) {
-      dragging = false;
-      var pts = ids.map(function (id) { return pointers[id]; });
-      pinchStartDist = dist(pts[0], pts[1]);
-      pinchStartZoom = zoom;
-    }
-  });
-
-  stage.addEventListener('pointermove', function (e) {
-    if (!(e.pointerId in pointers)) return;
-    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
-    var ids = Object.keys(pointers);
-    if (ids.length === 2) {
-      var pts = ids.map(function (id) { return pointers[id]; });
-      var d = dist(pts[0], pts[1]);
-      if (pinchStartDist > 0) setZoom(pinchStartZoom * (d / pinchStartDist));
-    } else if (dragging) {
-      panX = dragStart.panX + (e.clientX - dragStart.x);
-      panY = dragStart.panY + (e.clientY - dragStart.y);
-      applyTransform();
-    }
-  });
-
-  function endPointer(e) {
-    delete pointers[e.pointerId];
-    if (Object.keys(pointers).length < 2) pinchStartDist = 0;
-    if (Object.keys(pointers).length === 0) { dragging = false; if (zoom > 1) img.style.cursor = 'grab'; }
+  function endDrag(e) {
+    if (dragStartX === null) return;
+    var dx = e.clientX - dragStartX;
+    var wasDragging = dragAxis === 'x';
+    dragStartX = null; dragAxis = null;
+    if (!wasDragging) return;
+    dragDeck.style.transform = '';
+    if (dx <= -SWIPE_THRESHOLD) goToDeck(currentIndex + 1);
+    else if (dx >= SWIPE_THRESHOLD) goToDeck(currentIndex - 1);
   }
-  stage.addEventListener('pointerup', endPointer);
-  stage.addEventListener('pointercancel', endPointer);
-  stage.addEventListener('pointerleave', function (e) { if (dragging) endPointer(e); });
-
-  dialog.addEventListener('keydown', function (e) {
-    if (img.hidden || zoom <= 1) return;
-    var step = 20;
-    if (e.key === 'ArrowLeft') { panX += step; applyTransform(); e.preventDefault(); }
-    else if (e.key === 'ArrowRight') { panX -= step; applyTransform(); e.preventDefault(); }
-    else if (e.key === 'ArrowUp') { panY += step; applyTransform(); e.preventDefault(); }
-    else if (e.key === 'ArrowDown') { panY -= step; applyTransform(); e.preventDefault(); }
-  });
+  document.addEventListener('pointerup', endDrag, { passive: true });
+  document.addEventListener('pointercancel', endDrag, { passive: true });
 })();
 </script>
