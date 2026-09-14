@@ -116,25 +116,6 @@ class VitalityListenerService : WearableListenerService() {
             .setDeleteIntent(dismissPendingIntent)
             .setAutoCancel(true)
 
-        // --- NEW CUSTOM URL LOGIC FOR CHEMISTRY ---
-        if (protocol == Protocol.CHEMISTRY) {
-            val urlIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com"))
-            val urlPendingIntent = PendingIntent.getActivity(
-                this,
-                protocol.id + 100, // Offset ID so it doesn't conflict with appPendingIntent
-                urlIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
-            val urlAction = NotificationCompat.Action.Builder(
-                android.R.drawable.ic_menu_info_details,
-                "EXTERNAL LINK", // Text on the notification button
-                urlPendingIntent
-            ).build()
-
-            builder.addAction(urlAction)
-        }
-
         try {
             NotificationManagerCompat.from(this).notify(protocol.id, builder.build())
         } catch (e: SecurityException) { }

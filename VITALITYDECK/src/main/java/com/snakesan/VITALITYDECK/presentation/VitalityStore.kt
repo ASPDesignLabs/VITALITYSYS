@@ -9,11 +9,15 @@ class VitalityStore(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("vitality_db", Context.MODE_PRIVATE)
 
     fun checkDailyReset() {
-        val lastDay = prefs.getInt("day_of_year", -1)
-        val currentDay = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
-        if (lastDay != currentDay) {
+        // year*1000 + dayOfYear (matches the phone's getTodayId()) — plain
+        // DAY_OF_YEAR alone would wrongly skip a reset if the watch went
+        // untouched for close to exactly 365/366 days.
+        val cal = Calendar.getInstance()
+        val currentDayId = (cal.get(Calendar.YEAR) * 1000) + cal.get(Calendar.DAY_OF_YEAR)
+        val lastDayId = prefs.getInt("day_id", -1)
+        if (lastDayId != currentDayId) {
             prefs.edit()
-                .putInt("day_of_year", currentDay)
+                .putInt("day_id", currentDayId)
                 .putInt("count_nutrient", 0)
                 .putInt("count_hydration", 0)
                 .putString("completed_keys", "")
@@ -69,6 +73,15 @@ class VitalityStore(context: Context) {
 
     fun clearPendingPainLogs() {
         prefs.edit().putString("pending_pain", "").apply()
+    }
+
+    // Drops a single delivered log rather than the whole queue, so a flush
+    // that fails partway through doesn't resend logs that already made it
+    // across (see MainActivity.flushPainLogs).
+    fun removePendingPainLog(timestamp: Long, level: Int) {
+        val remaining = getPendingPainLogs().filterNot { it.first == timestamp && it.second == level }
+        val newString = remaining.joinToString("|") { "${it.first}:${it.second}" }
+        prefs.edit().putString("pending_pain", newString).apply()
     }
 
     // --- CONFIGURATION ---
