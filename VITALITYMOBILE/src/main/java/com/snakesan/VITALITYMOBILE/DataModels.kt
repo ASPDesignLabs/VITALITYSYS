@@ -7,6 +7,21 @@ import java.nio.ByteBuffer
 enum class AppMode { DASHBOARD, INTERRUPT_CAPTURE, INTERRUPT_ACTION, INTERRUPT_RESTORE, NUTRITION_CAPTURE }
 enum class UploadState { IDLE, CONNECTING, UPLOADING, DOWNLOADING, SUCCESS_UPLOAD, SUCCESS_DOWNLOAD }
 
+// How hard it is to back out of the interrupt-capture/action screens without
+// completing the protocol. Lets someone dial this tool between "just a
+// reminder, don't fight me" and "no, actually make me do the thing" —
+// steering their own behavior on purpose rather than the app deciding for
+// them.
+enum class EscapeDifficulty(val id: Int, val label: String, val description: String) {
+    EASY(0, "EASY", "Back exits immediately. Good when this is just a reminder."),
+    STANDARD(1, "STANDARD", "Back asks you to confirm skipping first."),
+    FIRM(2, "FIRM", "Back does nothing. Finish or explicitly abandon it.");
+
+    companion object {
+        fun fromId(id: Int): EscapeDifficulty = values().firstOrNull { it.id == id } ?: STANDARD
+    }
+}
+
 // itemKey identifies which specific dose/hygiene task this event is about
 // (see SysConfig.doseKey / hygieneKey). Empty for NUTRIENT/HYDRATION, which
 // have no sub-items.

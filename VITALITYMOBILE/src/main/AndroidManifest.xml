@@ -10,6 +10,10 @@
     <!-- HEALTH CONNECT PERMISSIONS -->
     <uses-permission android:name="android.permission.health.WRITE_HYDRATION" />
     <uses-permission android:name="android.permission.health.WRITE_NUTRITION" />
+    <!-- Optional photo input for the interrupt-capture screen -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
 
     <queries>
