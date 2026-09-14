@@ -36,6 +36,7 @@
     --amber: #ff9900;  /* MAINTENANCE protocol / warning */
     --font-display: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
     --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --statusbar-h: 44px;
   }
 
   * { box-sizing: border-box; }
@@ -195,11 +196,12 @@
   .statusbar {
     position: sticky;
     top: 0;
-    z-index: 10;
+    z-index: 40;
+    height: var(--statusbar-h);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.4rem 0.9rem;
+    padding: 0 0.9rem;
     background: var(--void);
     border-bottom: 1px solid var(--border);
     font-family: var(--font-display);
@@ -207,6 +209,31 @@
   }
   .statusbar-clock { color: var(--text-dim); letter-spacing: 0.05em; }
   .statusbar-right { display: flex; align-items: center; gap: 0.75rem; }
+
+  /* --- Immersive/Classic layout toggle, a real checkbox styled as a
+     switch (native semantics, keyboard/AT support for free). Always
+     visible in the status bar, in both layout modes. --- */
+  .immersive-toggle { display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; min-height: 44px; padding: 4px; }
+  .immersive-toggle input {
+    position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0;
+  }
+  .immersive-toggle-track {
+    position: relative;
+    width: 30px; height: 16px; flex: none;
+    border: 1px solid var(--border);
+    background: transparent;
+    clip-path: polygon(4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px), 0 4px);
+  }
+  .immersive-toggle-track::after {
+    content: "";
+    position: absolute; top: 2px; left: 2px; width: 10px; height: 10px;
+    background: var(--text-faint);
+  }
+  .immersive-toggle input:checked + .immersive-toggle-track { border-color: var(--cyan); background: rgba(0,243,255,0.12); }
+  .immersive-toggle input:checked + .immersive-toggle-track::after { background: var(--cyan); transform: translateX(14px); }
+  .immersive-toggle input:focus-visible + .immersive-toggle-track { outline: 3px solid var(--green); outline-offset: 2px; }
+  .immersive-toggle-label { font-size: 0.6rem; font-weight: 700; color: var(--text-dim); letter-spacing: 0.04em; }
+  .immersive-toggle input:checked ~ .immersive-toggle-label { color: var(--cyan); }
   .statusbar-battery { width: 22px; height: 11px; color: var(--text-dim); }
 
   details.deck-select { position: relative; }
@@ -219,6 +246,8 @@
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
+    min-height: 44px;
+    padding: 4px 2px;
   }
   details.deck-select > summary::-webkit-details-marker { display: none; }
   details.deck-select > summary::marker { content: ""; }
@@ -733,13 +762,122 @@
   .about-links .btn { text-align: center; }
   .deck-copy h3 { font-family: var(--font-display); color: var(--text); font-size: 0.85rem; margin: 1.25rem 0 0.5rem; }
   .deck-copy h3:first-child { margin-top: 0; }
+
+  /* ============================================================
+     Immersive layout -- an alternative presentation of the exact
+     same deck markup above, not a duplicate. Classic (the default
+     CSS, everything above this block) stays the real fallback: with
+     JS disabled, html never gets the "immersive" class, none of the
+     rules below ever match, and the page is precisely today's
+     scrolling document. Toggled via #immersiveToggle in the status
+     bar, persisted to localStorage; see the <script> blocks for the
+     controller. --------------------------------------------------- */
+
+  .immersive-nav, .immersive-indicator { display: none; }
+  html.immersive .immersive-nav { display: flex; }
+  html.immersive .immersive-indicator { display: block; }
+
+  .immersive-nav {
+    /* Keeps the full 44x44 touch target for accessibility, but stays
+       visually light (no filled box) so it reads as a floating edge
+       affordance instead of a panel that occludes the scrollable
+       content it sits over. */
+    position: fixed;
+    top: calc(50% + var(--statusbar-h) / 2);
+    transform: translateY(-50%);
+    z-index: 30;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: transparent;
+    border: none;
+    color: var(--cyan);
+    font-size: 1.3rem;
+    text-shadow: 0 0 5px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95);
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+  }
+  .immersive-nav:hover, .immersive-nav:focus-visible { opacity: 1; }
+  .immersive-nav:focus-visible { outline: 3px solid var(--green); outline-offset: 2px; }
+  .immersive-nav[disabled] { opacity: 0.15; cursor: default; pointer-events: none; }
+  .immersive-nav-prev { left: 8px; }
+  .immersive-nav-next { right: 8px; }
+
+  .immersive-indicator {
+    position: fixed;
+    top: calc(var(--statusbar-h) + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+    font-family: var(--font-display);
+    font-size: 0.65rem;
+    color: var(--text-faint);
+    background: rgba(5,5,5,0.75);
+    padding: 3px 10px;
+    border: 1px solid var(--border);
+  }
+
+  /* Lock exactly one deck's own phone-frame full-screen at a time,
+     9:16, as large as the viewport (minus the status bar) allows. */
+  html.immersive .deck { display: none; }
+  html.immersive .deck.is-active {
+    display: flex;
+    position: fixed;
+    top: var(--statusbar-h);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    background: #000;
+    z-index: 20;
+  }
+  html.immersive .deck.is-active .deck-eyebrow { display: none; }
+  html.immersive .phone-frame {
+    height: min(100%, calc((100vw) * 16 / 9));
+    width: min(100%, calc((100vh - var(--statusbar-h)) * 9 / 16));
+    margin: 0;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  html.immersive .phone-screen {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    html.immersive .deck.is-sliding { transition: transform 0.32s ease; }
+  }
 </style>
 
 <a class="skip-link" href="#main">Skip to main content</a>
 
+<script>
+// Runs before the decks below are parsed, so the layout mode is already
+// decided by the time they render -- avoids a flash of the wrong layout.
+// Immersive is the default; only an explicit stored "classic" opts out.
+(function () {
+  var immersive = true;
+  try { immersive = localStorage.getItem('vitalitysys-layout') !== 'classic'; } catch (e) {}
+  if (immersive) document.documentElement.classList.add('immersive');
+})();
+</script>
+
 <header class="statusbar">
   <span class="statusbar-clock" id="statusClock" aria-hidden="true">09:41</span>
   <div class="statusbar-right">
+    <label class="immersive-toggle">
+      <input type="checkbox" id="immersiveToggle" checked>
+      <span class="immersive-toggle-track" aria-hidden="true"></span>
+      <span class="immersive-toggle-label">Immersive</span>
+    </label>
     <svg class="statusbar-battery" viewBox="0 0 24 12" aria-hidden="true" focusable="false">
       <rect x="0.5" y="0.5" width="20" height="11" rx="2" ry="2" fill="none" stroke="currentColor"/>
       <rect x="21.5" y="4" width="2" height="4" fill="currentColor"/>
@@ -760,6 +898,15 @@
     </details>
   </div>
 </header>
+
+<button type="button" class="immersive-nav immersive-nav-prev" id="immersivePrev" aria-label="Previous deck">
+  <span aria-hidden="true">&#10094;</span>
+</button>
+<button type="button" class="immersive-nav immersive-nav-next" id="immersiveNext" aria-label="Next deck">
+  <span aria-hidden="true">&#10095;</span>
+</button>
+<div class="immersive-indicator" id="immersiveIndicator" aria-hidden="true"></div>
+<div class="visually-hidden" id="immersiveLiveRegion" aria-live="polite"></div>
 
 <main id="main">
 
@@ -1020,35 +1167,40 @@
 
   <section id="deck-pain" class="deck">
     <p class="deck-eyebrow">Deck 04</p>
-    <h2 class="dash-header-title" style="font-size:1rem;text-align:center;">PAIN &amp; SYMPTOM LOGGING</h2>
-    <div class="watch-mockup-row">
-      <div class="watch-frame" role="img" aria-label="Watch pain-logging interface demo, showing a selected pain level of 6, labeled Impairing">
-        <div class="watch-scanline"></div>
-        <span class="watch-label">DIAGNOSTIC</span>
-        <p class="watch-stat-label">TAP EDGES</p>
-        <p class="watch-stat-value" style="color:var(--pink);">6</p>
-        <p class="watch-pain-desc">IMPAIRING</p>
-        <span class="watch-btn cut-watch-btn" style="color:var(--pink);border-color:var(--pink);background:rgba(255,0,85,0.12);">CONFIRM</span>
+    <div class="phone-frame">
+      <div class="phone-notch" aria-hidden="true"></div>
+      <div class="phone-screen">
+        <h2 class="dash-header-title" style="font-size:1rem;">PAIN &amp; SYMPTOM LOGGING</h2>
+        <div class="watch-mockup-row">
+          <div class="watch-frame" role="img" aria-label="Watch pain-logging interface demo, showing a selected pain level of 6, labeled Impairing">
+            <div class="watch-scanline"></div>
+            <span class="watch-label">DIAGNOSTIC</span>
+            <p class="watch-stat-label">TAP EDGES</p>
+            <p class="watch-stat-value" style="color:var(--pink);">6</p>
+            <p class="watch-pain-desc">IMPAIRING</p>
+            <span class="watch-btn cut-watch-btn" style="color:var(--pink);border-color:var(--pink);background:rgba(255,0,85,0.12);">CONFIRM</span>
+          </div>
+        </div>
+        <p class="watch-caption">
+          A recreation of the watch's own pain-level selector — tapping the top
+          or bottom edge raises or lowers the number, 0 to 10. Demo value shown,
+          not a live reading.
+        </p>
+        <div class="deck-copy">
+          <p>
+            A separate flow from the four protocols: log a symptom on a 0–10
+            scale (from <em>resolved</em> up through <em>critical</em>) with a
+            short note on location, type, and triggers — from the watch or
+            the phone.
+          </p>
+          <p>
+            Logging anything above a 3 automatically schedules a 60-minute
+            follow-up check-in, unless it's inside your configured sleep
+            window — which can itself be overridden when round-the-clock
+            monitoring is actually wanted.
+          </p>
+        </div>
       </div>
-    </div>
-    <p class="watch-caption">
-      A recreation of the watch's own pain-level selector — tapping the top
-      or bottom edge raises or lowers the number, 0 to 10. Demo value shown,
-      not a live reading.
-    </p>
-    <div class="deck-copy" style="margin-left:auto;margin-right:auto;">
-      <p>
-        A separate flow from the four protocols: log a symptom on a 0–10
-        scale (from <em>resolved</em> up through <em>critical</em>) with a
-        short note on location, type, and triggers — from the watch or
-        the phone.
-      </p>
-      <p>
-        Logging anything above a 3 automatically schedules a 60-minute
-        follow-up check-in, unless it's inside your configured sleep
-        window — which can itself be overridden when round-the-clock
-        monitoring is actually wanted.
-      </p>
     </div>
   </section>
 
@@ -1098,38 +1250,43 @@
 
   <section id="deck-watch" class="deck">
     <p class="deck-eyebrow">Deck 06</p>
-    <h2 class="dash-header-title" style="font-size:1rem;text-align:center;">THE WATCH APP</h2>
-    <div class="watch-mockup-row">
-      <div class="watch-frame" role="img" aria-label="Watch deck demo showing the Nutrient protocol: intake log 2 of 3, with a Log Entry button, top/bottom tap zones, and pagination dots for the five decks">
-        <div class="watch-scanline"></div>
-        <span class="watch-chevron top">&#9650;</span>
-        <span class="watch-label">PROT: NUTRIENT</span>
-        <p class="watch-stat-label">INTAKE LOG</p>
-        <p class="watch-stat-value">2 <span>/ 3</span></p>
-        <span class="watch-btn cut-watch-btn">LOG ENTRY</span>
-        <span class="watch-chevron bottom">&#9660;</span>
-        <div class="watch-dots">
-          <span class="active"></span><span></span><span></span><span></span><span></span>
+    <div class="phone-frame">
+      <div class="phone-notch" aria-hidden="true"></div>
+      <div class="phone-screen">
+        <h2 class="dash-header-title" style="font-size:1rem;">THE WATCH APP</h2>
+        <div class="watch-mockup-row">
+          <div class="watch-frame" role="img" aria-label="Watch deck demo showing the Nutrient protocol: intake log 2 of 3, with a Log Entry button, top/bottom tap zones, and pagination dots for the five decks">
+            <div class="watch-scanline"></div>
+            <span class="watch-chevron top">&#9650;</span>
+            <span class="watch-label">PROT: NUTRIENT</span>
+            <p class="watch-stat-label">INTAKE LOG</p>
+            <p class="watch-stat-value">2 <span>/ 3</span></p>
+            <span class="watch-btn cut-watch-btn">LOG ENTRY</span>
+            <span class="watch-chevron bottom">&#9660;</span>
+            <div class="watch-dots">
+              <span class="active"></span><span></span><span></span><span></span><span></span>
+            </div>
+          </div>
+        </div>
+        <p class="watch-caption">
+          A recreation of one deck's actual layout — the top/bottom edges are
+          real tap zones for previous/next, the dots on the right mark which
+          of the five decks is active. Demo data, not live.
+        </p>
+        <div class="deck-copy">
+          <p>
+            VITALITY.SYS ships as a standalone Wear OS app — it keeps running
+            its own schedule and alerts even when the phone is out of
+            Bluetooth range, then re-syncs once it's back.
+          </p>
+          <p>
+            Navigation is built for the bezel: rotate to move between five
+            decks (one per protocol, plus pain logging), or tap the top and
+            bottom edges of the screen. Each deck shows exactly one piece of
+            live status and one action button — nothing to scroll through.
+          </p>
         </div>
       </div>
-    </div>
-    <p class="watch-caption">
-      A recreation of one deck's actual layout — the top/bottom edges are
-      real tap zones for previous/next, the dots on the right mark which
-      of the five decks is active. Demo data, not live.
-    </p>
-    <div class="deck-copy" style="margin-left:auto;margin-right:auto;">
-      <p>
-        VITALITY.SYS ships as a standalone Wear OS app — it keeps running
-        its own schedule and alerts even when the phone is out of
-        Bluetooth range, then re-syncs once it's back.
-      </p>
-      <p>
-        Navigation is built for the bezel: rotate to move between five
-        decks (one per protocol, plus pain logging), or tap the top and
-        bottom edges of the screen. Each deck shows exactly one piece of
-        live status and one action button — nothing to scroll through.
-      </p>
     </div>
   </section>
 
@@ -1250,5 +1407,212 @@
       setExpanded(btn, btn.getAttribute('aria-expanded') !== 'true');
     });
   });
+
+  /* ============================================================
+     Immersive layout controller. Classic (the default, everything
+     above) is the real content in document order -- this only adds
+     an "is-active" class (and a transform during transitions) to
+     whichever single .deck should currently fill the screen. Nothing
+     here removes content from the DOM, so turning immersive off (or
+     the early <script> never having added the class, i.e. no JS)
+     always leaves the plain scrolling page intact underneath. */
+  var root = document.documentElement;
+  var decks = Array.prototype.slice.call(document.querySelectorAll('.deck'));
+  var toggle = document.getElementById('immersiveToggle');
+  var prevBtn = document.getElementById('immersivePrev');
+  var nextBtn = document.getElementById('immersiveNext');
+  var indicator = document.getElementById('immersiveIndicator');
+  var liveRegion = document.getElementById('immersiveLiveRegion');
+  var currentIndex = 0;
+  var hasActivated = false;
+
+  function reduceMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  function updateChrome(announce) {
+    if (indicator) indicator.textContent = pad2(currentIndex + 1) + ' / ' + pad2(decks.length);
+    if (prevBtn) prevBtn.disabled = currentIndex === 0;
+    if (nextBtn) nextBtn.disabled = currentIndex === decks.length - 1;
+    if (liveRegion && announce) {
+      var heading = decks[currentIndex].querySelector('h1, h2');
+      liveRegion.textContent = 'Deck ' + (currentIndex + 1) + ' of ' + decks.length +
+        (heading ? ': ' + heading.textContent.trim() : '');
+    }
+  }
+
+  function focusDeckHeading(deck) {
+    var heading = deck.querySelector('h1, h2');
+    if (!heading) return;
+    if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+    heading.focus({ preventScroll: true });
+  }
+
+  function clearTransitionState(deck) {
+    deck.classList.remove('is-sliding');
+    deck.style.transform = '';
+  }
+
+  function activateInitial(index) {
+    currentIndex = Math.max(0, Math.min(decks.length - 1, index));
+    decks[currentIndex].classList.add('is-active');
+    updateChrome(false);
+    hasActivated = true;
+  }
+
+  function goToDeck(newIndex) {
+    newIndex = Math.max(0, Math.min(decks.length - 1, newIndex));
+    if (newIndex === currentIndex || !hasActivated) return;
+    var direction = newIndex > currentIndex ? 1 : -1;
+    var oldDeck = decks[currentIndex];
+    var newDeck = decks[newIndex];
+
+    oldDeck.classList.add('is-active');
+    newDeck.classList.add('is-active');
+
+    if (reduceMotion()) {
+      clearTransitionState(oldDeck);
+      oldDeck.classList.remove('is-active');
+      currentIndex = newIndex;
+      updateChrome(true);
+      focusDeckHeading(newDeck);
+      return;
+    }
+
+    newDeck.style.transform = 'translateX(' + (direction * 100) + '%)';
+    oldDeck.style.transform = 'translateX(0)';
+    void newDeck.offsetWidth; // force layout so the starting position above isn't skipped
+
+    oldDeck.classList.add('is-sliding');
+    newDeck.classList.add('is-sliding');
+    oldDeck.style.transform = 'translateX(' + (-direction * 100) + '%)';
+    newDeck.style.transform = 'translateX(0)';
+
+    var done = false;
+    function finish() {
+      if (done) return;
+      done = true;
+      newDeck.removeEventListener('transitionend', finish);
+      clearTransitionState(oldDeck);
+      clearTransitionState(newDeck);
+      oldDeck.classList.remove('is-active');
+    }
+    newDeck.addEventListener('transitionend', finish);
+    setTimeout(finish, 500); // safety net if transitionend never fires
+
+    currentIndex = newIndex;
+    updateChrome(true);
+    focusDeckHeading(newDeck);
+  }
+
+  function findScrolledDeck() {
+    var mid = window.innerHeight / 2;
+    var best = 0, bestDist = Infinity;
+    decks.forEach(function (d, i) {
+      var rect = d.getBoundingClientRect();
+      var dist = Math.abs((rect.top + rect.height / 2) - mid);
+      if (dist < bestDist) { bestDist = dist; best = i; }
+    });
+    return best;
+  }
+
+  function startingIndex() {
+    if (location.hash) {
+      var found = -1;
+      decks.forEach(function (d, i) { if ('#' + d.id === location.hash) found = i; });
+      if (found !== -1) return found;
+    }
+    return 0;
+  }
+
+  function setImmersive(on, fromUserToggle) {
+    root.classList.toggle('immersive', on);
+    try { localStorage.setItem('vitalitysys-layout', on ? 'immersive' : 'classic'); } catch (e) {}
+    if (toggle) toggle.checked = on;
+    if (on) {
+      if (!hasActivated) {
+        activateInitial(startingIndex());
+      } else if (fromUserToggle) {
+        activateInitial(findScrolledDeck());
+      }
+    } else {
+      decks.forEach(function (d) {
+        clearTransitionState(d);
+        d.classList.remove('is-active');
+      });
+      hasActivated = false;
+    }
+  }
+
+  if (toggle) {
+    var startsImmersive = root.classList.contains('immersive');
+    toggle.checked = startsImmersive;
+    if (startsImmersive) activateInitial(startingIndex());
+    toggle.addEventListener('change', function () { setImmersive(toggle.checked, true); });
+  }
+
+  if (prevBtn) prevBtn.addEventListener('click', function () { goToDeck(currentIndex - 1); });
+  if (nextBtn) nextBtn.addEventListener('click', function () { goToDeck(currentIndex + 1); });
+
+  document.addEventListener('keydown', function (e) {
+    if (!root.classList.contains('immersive')) return;
+    var tag = document.activeElement ? document.activeElement.tagName : '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return; // let the interrupt-capture phase radios own their own arrow keys
+    if (e.key === 'ArrowRight') goToDeck(currentIndex + 1);
+    else if (e.key === 'ArrowLeft') goToDeck(currentIndex - 1);
+  });
+
+  document.querySelectorAll('.deck-select-menu a').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      if (!root.classList.contains('immersive')) return; // Classic mode: let the native anchor jump happen
+      e.preventDefault();
+      var targetId = a.getAttribute('href').slice(1);
+      var idx = -1;
+      decks.forEach(function (d, i) { if (d.id === targetId) idx = i; });
+      if (idx !== -1) goToDeck(idx);
+      if (deckSelect) deckSelect.open = false;
+    });
+  });
+
+  /* Pointer-based horizontal swipe. Locks to an axis only after a small
+     movement threshold, so vertical scrolling inside .phone-screen is
+     never hijacked -- only a clearly horizontal drag navigates decks. */
+  var dragStartX = null, dragStartY = null, dragAxis = null, dragDeck = null;
+  var SWIPE_THRESHOLD = 60;
+
+  document.addEventListener('pointerdown', function (e) {
+    if (!root.classList.contains('immersive') || !hasActivated) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    dragStartX = e.clientX; dragStartY = e.clientY; dragAxis = null;
+    dragDeck = decks[currentIndex];
+  }, { passive: true });
+
+  document.addEventListener('pointermove', function (e) {
+    if (dragStartX === null) return;
+    var dx = e.clientX - dragStartX, dy = e.clientY - dragStartY;
+    if (!dragAxis) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      dragAxis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    }
+    if (dragAxis !== 'x') return;
+    e.preventDefault();
+    if ((currentIndex === 0 && dx > 0) || (currentIndex === decks.length - 1 && dx < 0)) dx *= 0.35;
+    dragDeck.style.transform = 'translateX(' + dx + 'px)';
+  }, { passive: false });
+
+  function endDrag(e) {
+    if (dragStartX === null) return;
+    var dx = e.clientX - dragStartX;
+    var wasDragging = dragAxis === 'x';
+    dragStartX = null; dragAxis = null;
+    if (!wasDragging) return;
+    dragDeck.style.transform = '';
+    if (dx <= -SWIPE_THRESHOLD) goToDeck(currentIndex + 1);
+    else if (dx >= SWIPE_THRESHOLD) goToDeck(currentIndex - 1);
+  }
+  document.addEventListener('pointerup', endDrag, { passive: true });
+  document.addEventListener('pointercancel', endDrag, { passive: true });
 })();
 </script>
