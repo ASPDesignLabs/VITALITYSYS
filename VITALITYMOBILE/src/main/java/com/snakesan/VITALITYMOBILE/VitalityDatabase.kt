@@ -55,7 +55,16 @@ data class ComplianceMetrics(
 @Dao
 interface SystemDao {
     @Insert
-    suspend fun insertLog(log: SystemLog)
+    suspend fun insertLog(log: SystemLog): Long
+
+    // A pain event is saved the moment it arrives and its description is
+    // filled in afterwards, so these two let the description screen update
+    // (and de-duplicate) the row it belongs to instead of inserting another.
+    @Query("UPDATE system_logs SET note = :note WHERE id = :id")
+    suspend fun updateLogNote(id: Long, note: String)
+
+    @Query("SELECT id FROM system_logs WHERE type = 'PAIN' AND timestamp = :timestamp AND value = :value LIMIT 1")
+    suspend fun findPainLogId(timestamp: Long, value: Int): Long?
 
     @Query("SELECT * FROM system_logs WHERE timestamp BETWEEN :startTime AND :endTime ORDER BY timestamp ASC")
     fun getLogsInRange(startTime: Long, endTime: Long): Flow<List<SystemLog>>

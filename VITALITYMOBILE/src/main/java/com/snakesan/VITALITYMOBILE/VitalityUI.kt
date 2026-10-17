@@ -70,6 +70,14 @@ fun VitalityOrchestrator(activity: MainActivity) {
     // notification, which never clears from an escape — only from actually
     // finishing the protocol.
     BackHandler(enabled = canEscape) {
+        // A pain event's level is already saved before this screen shows, so
+        // there's nothing to protect: Back leaves right away at every tier.
+        // (Forcing someone logging pain to describe it first would be a trap,
+        // not a nudge.)
+        if (activity.painEventActive) {
+            activity.closePainEvent()
+            return@BackHandler
+        }
         when (activity.escapeDifficulty) {
             EscapeDifficulty.EASY -> activity.abandonInterruption()
             EscapeDifficulty.STANDARD -> showAbandonConfirm = true
@@ -171,7 +179,7 @@ fun PhotoThumbnail(uri: Uri, modifier: Modifier = Modifier) {
 
 @Composable
 fun InterruptionOverlay(activity: MainActivity) {
-    val isPainEvent = activity.pendingPainLevel > 0
+    val isPainEvent = activity.painEventActive
     val painLevel = activity.pendingPainLevel
 
     Box(
@@ -187,9 +195,20 @@ fun InterruptionOverlay(activity: MainActivity) {
             // --- PHASE 1: CAPTURE INPUT ---
             if (activity.appMode == AppMode.INTERRUPT_CAPTURE) {
                 Text(
-                    text = if (isPainEvent) "PAIN EVENT DETECTED (LVL $painLevel)" else "INTERRUPT DETECTED",
+                    text = when {
+                        !isPainEvent -> "INTERRUPT DETECTED"
+                        painLevel == 0 -> "PAIN RESOLVED (LVL 0)"
+                        else -> "PAIN EVENT DETECTED (LVL $painLevel)"
+                    },
                     color = NeonPink, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp
                 )
+                if (isPainEvent) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "✓ LEVEL SAVED — DETAILS ARE OPTIONAL", color = NeonGreen,
+                        fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp
+                    )
+                }
                 Spacer(Modifier.height(20.dp))
 
                 Text(
@@ -233,7 +252,7 @@ fun InterruptionOverlay(activity: MainActivity) {
 
                 Spacer(Modifier.height(30.dp))
 
-                CyberButtonBlock(if (isPainEvent) "LOG DATA & RESUME" else "LOCK VECTOR") {
+                CyberButtonBlock(if (isPainEvent) "ADD DETAILS & RESUME" else "LOCK VECTOR") {
                     if (isPainEvent) {
                         val note = text.ifEmpty { "No details provided" } + if (photoUri != null) " [+photo]" else ""
                         activity.commitPainLog(note)
@@ -244,6 +263,13 @@ fun InterruptionOverlay(activity: MainActivity) {
                             activity, activity.activeProtocol!!, activity.pendingItemKey,
                             activity.userContext, "ACTION", photoUri?.toString()
                         )
+                    }
+                }
+
+                if (isPainEvent) {
+                    Spacer(Modifier.height(12.dp))
+                    SmallActionButton("DONE — NO DETAILS", Color.Gray, Modifier.fillMaxWidth()) {
+                        activity.closePainEvent()
                     }
                 }
             }

@@ -30,7 +30,9 @@ import com.snakesan.vitalitysys.data.DailyStats
 import com.snakesan.vitalitysys.data.SystemLog
 import com.snakesan.vitalitysys.data.VitalityDatabase
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -75,6 +77,15 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
 
     private val activeDebugBleeds = mutableStateMapOf<Int, Long>()
     var pendingPainLevel by mutableIntStateOf(0)
+    // True while the pain-description screen is up. Tracked separately from
+    // pendingPainLevel because 0 ("RESOLVED") is a valid pain level — keying
+    // off `level > 0` made a resolved log open a bogus CHEMISTRY interrupt
+    // and save nothing.
+    var painEventActive by mutableStateOf(false)
+    // The saved row for the pain event on screen. The level is written the
+    // moment the event arrives (see savePainEvent), so the description screen
+    // only ever updates this row's note — escaping it can't lose the entry.
+    private var pendingPainLogId: Deferred<Long>? = null
 
     var rangeStart by mutableLongStateOf(System.currentTimeMillis() - 604800000L)
     var rangeEnd by mutableLongStateOf(System.currentTimeMillis())
@@ -404,11 +415,15 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             completedViaWatch = false
             if (protoId == 99) {
                 val level = intent.getIntExtra("PAIN_LEVEL", 0)
+                val loggedAt = intent.getLongExtra("PAIN_TS", 0L).takeIf { it > 0L }
+                    ?: System.currentTimeMillis()
                 pendingPainLevel = level
+                painEventActive = true
                 appMode = AppMode.INTERRUPT_CAPTURE
                 userContext = ""
                 userContextPhotoUri = null
                 activeProtocol = Protocol.CHEMISTRY
+                savePainEvent(level, loggedAt)
             } else if (protoId != -1) {
                 val protocol = Protocol.values().find { it.id == protoId }
                 activeProtocol = protocol
@@ -460,10 +475,14 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         if (event.path == "/sys/pain_log") {
             val buffer = ByteBuffer.wrap(event.data)
             val painLevel = buffer.int
+            // The watch stamps each log when it's tapped, which can be well
+            // before delivery if it sat in the retry queue while disconnected.
+            val loggedAt = if (buffer.remaining() >= 8) buffer.long else System.currentTimeMillis()
             val intent = Intent(this, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 putExtra("PROTOCOL_ID", 99)
                 putExtra("PAIN_LEVEL", painLevel)
+                putExtra("PAIN_TS", loggedAt)
             }
             startActivity(intent)
         }
@@ -543,6 +562,14 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     // or sticky in-progress notifications — the task is still undone, so the
     // nag should keep standing until it's actually fulfilled.
     fun abandonInterruption() {
+        // A pain event has nothing to skip: its level is already saved, and
+        // it isn't tied to any alert audit (it only borrows CHEMISTRY's id
+        // and color for styling), so leaving must not touch a real dose
+        // alert's audit row.
+        if (painEventActive) {
+            closePainEvent()
+            return
+        }
         val protocol = activeProtocol
         if (protocol != null) {
             lifecycleScope.launch(Dispatchers.IO) {
@@ -581,7 +608,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         // for styling — it isn't actually responding to any CHEMISTRY alert,
         // so a real chemistry-dose completion arriving mid-pain-capture must
         // not yank the user out of describing their symptoms.
-        if (pendingPainLevel > 0) return
+        if (painEventActive) return
         val matches = (appMode == AppMode.INTERRUPT_CAPTURE || appMode == AppMode.INTERRUPT_ACTION) &&
             activeProtocol == protocol &&
             (itemKey.isEmpty() || itemKey == pendingItemKey)
@@ -606,7 +633,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             // borrows CHEMISTRY's id/color without actually responding to a
             // CHEMISTRY alert, so it must not shield an unrelated real
             // chemistry-dose notification from being recorded as dismissed.
-            if (instance.pendingPainLevel > 0) return false
+            if (instance.painEventActive) return false
             return instance.appMode != AppMode.DASHBOARD && instance.activeProtocol?.id == protocolId
         }
 
@@ -657,23 +684,42 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
 
     // Now these functions are safely back in the main class:
 
+    // Writes the pain level the moment the event arrives, with a placeholder
+    // note, so nothing the user does on the description screen (including
+    // leaving it) can lose the entry. Keyed by the watch's own timestamp so
+    // a re-delivered event or a re-created Activity reuses the same row
+    // instead of logging it twice. Runs outside lifecycleScope on purpose:
+    // the write must still finish if the Activity goes away right after.
+    private fun savePainEvent(level: Int, loggedAt: Long) {
+        pendingPainLogId = CoroutineScope(Dispatchers.IO).async {
+            val dao = db.systemDao()
+            dao.findPainLogId(loggedAt, level) ?: dao.insertLog(
+                SystemLog(timestamp = loggedAt, type = "PAIN", value = level, note = "No details provided")
+            )
+        }
+    }
+
+    // Attaches the typed/photo description to the already-saved pain row.
     fun commitPainLog(note: String) {
+        val saved = pendingPainLogId
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
-                db.systemDao().insertLog(
-                    SystemLog(
-                        timestamp = System.currentTimeMillis(),
-                        type = "PAIN",
-                        value = pendingPainLevel,
-                        note = note
-                    )
-                )
+                val id = runCatching { saved?.await() }.getOrNull()
+                if (id != null) db.systemDao().updateLogNote(id, note)
             }
-            pendingPainLevel = 0
-            appMode = AppMode.DASHBOARD
-            activeProtocol = null
-            userContextPhotoUri = null
+            closePainEvent()
         }
+    }
+
+    // Ends the pain screen without touching any audit or notification state.
+    fun closePainEvent() {
+        pendingPainLevel = 0
+        painEventActive = false
+        pendingPainLogId = null
+        appMode = AppMode.DASHBOARD
+        activeProtocol = null
+        userContext = ""
+        userContextPhotoUri = null
     }
 
     // Quick-purge, surgical-deletion, factory-reset, and fuzzy-data-injection
