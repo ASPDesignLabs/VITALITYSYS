@@ -349,25 +349,12 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         vibrateAck(this, heavy = true)
         val now = System.currentTimeMillis()
         store.addPendingPainLog(now, level)
-        store.lastPainLevel = level
-        // Logging pain is the answer to a pending follow-up check-in, so clear
-        // its notification (it has its own id; see PAIN_PROTOCOL_ID).
-        (getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager).cancel(PAIN_PROTOCOL_ID)
+        // Schedules or cancels the 60-minute follow-up and clears a pending
+        // check-in notification — the same rule pain logged on the phone goes
+        // through (see PainFollowUp).
+        PainFollowUp.apply(this, level)
         flushPainLogs()
-        if (level > 3) {
-            schedulePainCheck()
-        } else {
-            WorkManager.getInstance(this).cancelUniqueWork("PainCheck")
-        }
         activeDeckIndex = 0
-    }
-    
-    private fun schedulePainCheck() {
-        val painCheck = OneTimeWorkRequestBuilder<SentinelWorker>()
-            .setInitialDelay(60, TimeUnit.MINUTES)
-            .setInputData(Data.Builder().putBoolean("CHECK_PAIN", true).build())
-            .build()
-        WorkManager.getInstance(this).enqueueUniqueWork("PainCheck", ExistingWorkPolicy.REPLACE, painCheck)
     }
 
     private fun flushPainLogs() {

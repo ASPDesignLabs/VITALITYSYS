@@ -55,6 +55,14 @@ class VitalityStore(context: Context) {
         get() = prefs.getInt("last_pain_lvl", 0)
         set(value) = prefs.edit().putInt("last_pain_lvl", value).apply()
 
+    // Timestamp of the newest pain log the PHONE told us about. The phone's
+    // sync item is persistent and can be redelivered (a reconnect, a service
+    // restart), so this keeps the same entry from re-running the follow-up
+    // rule (which would push the 60-minute check-in back each time).
+    var lastPhonePainTs: Long
+        get() = prefs.getLong("last_phone_pain_ts", 0L)
+        set(value) = prefs.edit().putLong("last_phone_pain_ts", value).apply()
+
     fun setLastTime(protocol: Protocol, time: Long) = prefs.edit().putLong("last_time_${protocol.id}", time).apply()
     fun getLastTime(protocol: Protocol): Long = prefs.getLong("last_time_${protocol.id}", 0L)
 

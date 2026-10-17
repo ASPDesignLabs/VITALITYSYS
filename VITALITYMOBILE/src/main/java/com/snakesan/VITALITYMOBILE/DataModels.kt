@@ -19,6 +19,17 @@ fun protocolDisplayLabel(protocolType: String): String =
     Protocol.values().firstOrNull { it.name == protocolType }?.label
         ?: if (protocolType == PAIN_CHECK_TYPE) "PAIN CHECK-IN" else protocolType
 
+// Plain-language label for a 0-10 pain level (matches the watch's selector).
+fun painDescriptor(level: Int): String = when (level) {
+    0 -> "RESOLVED"
+    1 -> "NEGLIGIBLE"
+    2, 3 -> "NOTICEABLE"
+    4, 5 -> "DISTRACTING"
+    6, 7 -> "IMPAIRING"
+    8, 9 -> "SEVERE"
+    else -> "CRITICAL"
+}
+
 enum class AppMode { DASHBOARD, INTERRUPT_CAPTURE, INTERRUPT_ACTION, INTERRUPT_RESTORE, NUTRITION_CAPTURE }
 enum class UploadState { IDLE, CONNECTING, UPLOADING, DOWNLOADING, SUCCESS_UPLOAD, SUCCESS_DOWNLOAD }
 

@@ -103,12 +103,17 @@ fun VitalityOrchestrator(activity: MainActivity) {
         }
     }
 
+    // The pain picker sits on top of everything (it can be opened from the
+    // check-in notification mid-response), so its Back handler is declared last:
+    // the last enabled BackHandler wins.
+    BackHandler(enabled = activity.painPickerActive) { activity.requestClosePainPicker() }
+
     // The "lock": while an interrupt (or the nutrition log) is up, the whole
     // screen is taken over — touches can't reach the dashboard underneath,
     // screen readers can't wander into it either, and a banner keeps saying
     // what's locked, which step you're on, and exactly how to leave.
     val lockedProtocol = activity.activeProtocol?.takeIf { activity.appMode != AppMode.DASHBOARD }
-    val locked = lockedProtocol != null
+    val locked = lockedProtocol != null || activity.painPickerActive
 
     Box(Modifier.fillMaxSize().background(NeonBg)) {
         Box(Modifier.fillMaxSize().then(if (locked) Modifier.clearAndSetSemantics { } else Modifier)) {
@@ -194,6 +199,10 @@ fun VitalityOrchestrator(activity: MainActivity) {
                     ) { activity.abandonInterruption() }
                 }
             }
+        }
+
+        if (activity.painPickerActive) {
+            PainPickerLayer(activity)
         }
 
         if (showAbandonConfirm) {
@@ -493,6 +502,13 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
         Spacer(Modifier.height(12.dp))
 
         // --- MODULES ---
+        // The phone's own way to log pain (it used to be watch-only, with the
+        // phone just adding a description afterwards). Also where tapping the
+        // pain check-in notification lands.
+        CyberButtonBlock("LOG PAIN", NeonPink) { activity.openPainPicker() }
+
+        Spacer(Modifier.height(12.dp))
+
         DiagnosticModule(logs, audits, activity)
 
         Spacer(Modifier.height(12.dp))

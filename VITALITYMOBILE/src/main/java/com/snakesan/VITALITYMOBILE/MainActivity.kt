@@ -88,6 +88,21 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     // only ever updates this row's note — escaping it can't lose the entry.
     private var pendingPainLogId: Deferred<Long>? = null
 
+    // The phone's own pain picker: a user-initiated pain log (dashboard button,
+    // or tapping the pain check-in notification). Unlike a pain event that
+    // arrives from the watch — already saved by the time its screen shows —
+    // nothing here is saved until SAVE, so Back asks before discarding
+    // anything chosen or typed (see requestClosePainPicker).
+    var painPickerActive by mutableStateOf(false)
+    var painPickerLevel by mutableStateOf<Int?>(null)
+    var painPickerNote by mutableStateOf("")
+    var painPickerPhotoUri by mutableStateOf<Uri?>(null)
+    var painPickerConfirmDiscard by mutableStateOf(false)
+    // Which screen the photo currently being taken belongs to, so the picker's
+    // photo can never overwrite an interrupt's (the two can be open together
+    // if the check-in notification is tapped mid-response).
+    private var photoForPicker = false
+
     var rangeStart by mutableLongStateOf(System.currentTimeMillis() - 604800000L)
     var rangeEnd by mutableLongStateOf(System.currentTimeMillis())
 
@@ -133,13 +148,26 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     private val takePictureLauncher = registerForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success ->
-        userContextPhotoUri = if (success) photoCaptureTarget else null
+        val taken = if (success) photoCaptureTarget else null
+        if (photoForPicker) painPickerPhotoUri = taken else userContextPhotoUri = taken
         photoCaptureTarget = null
+        photoForPicker = false
     }
 
     // Entry point for the "ATTACH PHOTO" option in the interrupt-capture
     // screen — an alternative to typing what you were doing.
     fun capturePhoto() {
+        photoForPicker = false
+        startPhotoCapture()
+    }
+
+    // Same, for the pain picker's description.
+    fun capturePainPhoto() {
+        photoForPicker = true
+        startPhotoCapture()
+    }
+
+    private fun startPhotoCapture() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             != PackageManager.PERMISSION_GRANTED
         ) {
@@ -465,6 +493,13 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     }
 
     private fun handleIntent(intent: Intent) {
+        // Tapped the pain check-in notification: open the pain picker. The
+        // extra is cleared so a re-created Activity re-reading this same
+        // intent (a rotation, say) doesn't open it a second time.
+        if (intent.getBooleanExtra("OPEN_PAIN_PICKER", false)) {
+            intent.removeExtra("OPEN_PAIN_PICKER")
+            openPainPicker()
+        }
         if (intent.hasExtra("PROTOCOL_ID")) {
             val protoId = intent.getIntExtra("PROTOCOL_ID", -1)
             completedViaWatch = false
@@ -802,6 +837,65 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             }
             closePainEvent()
         }
+    }
+
+    // ---- Phone pain picker ----
+
+    fun openPainPicker() {
+        if (painPickerActive) return // already open (e.g. a second notification tap)
+        painPickerLevel = null
+        painPickerNote = ""
+        painPickerPhotoUri = null
+        painPickerConfirmDiscard = false
+        painPickerActive = true
+    }
+
+    // Back / CANCEL. With nothing chosen or typed there is nothing to lose, so
+    // it just leaves; otherwise it asks first — an accidental Back must not
+    // silently throw an entry away, and (unlike a watch-logged event, which is
+    // already saved) nothing here has been saved yet.
+    fun requestClosePainPicker() {
+        val dirty = painPickerLevel != null || painPickerNote.isNotBlank() || painPickerPhotoUri != null
+        if (dirty) painPickerConfirmDiscard = true else closePainPicker()
+    }
+
+    fun closePainPicker() {
+        painPickerActive = false
+        painPickerLevel = null
+        painPickerNote = ""
+        painPickerPhotoUri = null
+        painPickerConfirmDiscard = false
+    }
+
+    // SAVE: writes the entry once, closes a pending check-in, and tells the
+    // watch (which owns the 60-minute follow-up schedule). Written on an
+    // app-scoped coroutine so it still finishes if the Activity goes away.
+    fun savePainFromPhone() {
+        val level = painPickerLevel ?: return
+        val loggedAt = System.currentTimeMillis()
+        val note = painPickerNote.trim().ifEmpty { "No details provided" } +
+            if (painPickerPhotoUri != null) " [+photo]" else ""
+        val app = applicationContext
+
+        CoroutineScope(Dispatchers.IO).launch {
+            val dao = VitalityDatabase.getDatabase(app).systemDao()
+            val id = dao.savePainLog(level, loggedAt)
+            dao.updateLogNote(id, note)
+        }
+        markPainCheckDone(app, "CLICKED")
+        sendPainToWatch(level, loggedAt)
+        closePainPicker()
+    }
+
+    // A persistent sync item rather than a message: it is delivered when the
+    // watch reconnects if it's out of range now. Same path overwrites, so only
+    // the newest entry is kept, which is all the follow-up rule needs.
+    private fun sendPainToWatch(level: Int, loggedAt: Long) {
+        val request = PutDataMapRequest.create("/vitality_pain_from_phone").apply {
+            dataMap.putInt("level", level)
+            dataMap.putLong("ts", loggedAt)
+        }.asPutDataRequest().setUrgent()
+        Wearable.getDataClient(this).putDataItem(request)
     }
 
     // Ends the pain screen without touching any audit or notification state.
