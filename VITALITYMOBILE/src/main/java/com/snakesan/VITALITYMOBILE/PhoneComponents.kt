@@ -18,6 +18,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -246,6 +248,13 @@ fun HoldToSkipButton(modifier: Modifier = Modifier, onSkip: () -> Unit) {
             .heightIn(min = 56.dp)
             .clip(VitalityShape)
             .background(NeonPink.copy(alpha = 0.06f))
+            // The progress fill is DRAWN, not a child Box. A child with
+            // fillMaxHeight() inside a wrap-content parent asks for all the
+            // height it's offered, so the button grew to fill the screen and
+            // squeezed the capture content to zero height.
+            .drawBehind {
+                drawRect(NeonPink.copy(alpha = 0.35f), size = Size(size.width * progress.value, size.height))
+            }
             .border(1.dp, NeonPink, VitalityShape)
             .pointerInput(Unit) {
                 awaitEachGesture {
@@ -276,13 +285,6 @@ fun HoldToSkipButton(modifier: Modifier = Modifier, onSkip: () -> Unit) {
             },
         contentAlignment = Alignment.Center
     ) {
-        Box(
-            Modifier
-                .align(Alignment.CenterStart)
-                .fillMaxHeight()
-                .fillMaxWidth(progress.value)
-                .background(NeonPink.copy(alpha = 0.35f))
-        )
         Text(
             if (holding) "KEEP HOLDING… $secondsLeft" else "HOLD ${totalSeconds}s TO SKIP",
             color = NeonPink,
