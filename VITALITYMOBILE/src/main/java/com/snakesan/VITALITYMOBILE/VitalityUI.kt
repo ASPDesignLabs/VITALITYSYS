@@ -26,6 +26,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -37,6 +38,7 @@ import com.snakesan.vitalitysys.data.SystemLog
 import com.snakesan.vitalitysys.debug.DebugFlags
 import com.snakesan.vitalitysys.debug.DebugPanel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -56,6 +58,19 @@ fun VitalityOrchestrator(activity: MainActivity) {
 
     val haptic = LocalHapticFeedback.current
     var showAbandonConfirm by remember { mutableStateOf(false) }
+
+    // Under FIRM, a Back press does nothing — so each press flashes the lock
+    // banner with *why*, for a few seconds, instead of failing silently. The
+    // counter (not a boolean) is the effect key so every press restarts it.
+    var backBlockedCount by remember { mutableIntStateOf(0) }
+    var backBlockedFlash by remember { mutableStateOf(false) }
+    LaunchedEffect(backBlockedCount) {
+        if (backBlockedCount > 0) {
+            backBlockedFlash = true
+            delay(3000)
+            backBlockedFlash = false
+        }
+    }
 
     // Whether backing out right now would abandon an in-flight interrupt at
     // all — INTERRUPT_RESTORE is excluded because the protocol is already
@@ -81,42 +96,98 @@ fun VitalityOrchestrator(activity: MainActivity) {
         when (activity.escapeDifficulty) {
             EscapeDifficulty.EASY -> activity.abandonInterruption()
             EscapeDifficulty.STANDARD -> showAbandonConfirm = true
-            EscapeDifficulty.FIRM -> haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            EscapeDifficulty.FIRM -> {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                backBlockedCount++
+            }
         }
     }
 
-    Box(Modifier.fillMaxSize().background(NeonBg)) {
-        VitalityDashboard(activity, logs, audits)
+    // The "lock": while an interrupt (or the nutrition log) is up, the whole
+    // screen is taken over — touches can't reach the dashboard underneath,
+    // screen readers can't wander into it either, and a banner keeps saying
+    // what's locked, which step you're on, and exactly how to leave.
+    val lockedProtocol = activity.activeProtocol?.takeIf { activity.appMode != AppMode.DASHBOARD }
+    val locked = lockedProtocol != null
 
-        if (activity.appMode != AppMode.DASHBOARD && activity.activeProtocol != null) {
-            if (activity.appMode == AppMode.NUTRITION_CAPTURE) {
-                NutritionOverlay(
-                    onLogMeal = { cal, fat, pro, fiber, sugar ->
-                        // 1. Launch Health Connect push
-                        activity.lifecycleScope.launch(Dispatchers.IO) {
-                            activity.healthConnectManager.logMeal(
-                                cal.toDouble(),
-                                fat.toDouble(),
-                                pro.toDouble(),
-                                fiber.toDouble(),
-                                sugar.toDouble()
-                            )
-                        }
-                        // 2. Fulfill protocol logic — skip the count bump if
-                        // the watch already logged (and counted) this meal
-                        // locally; we're only here for its macro detail.
-                        activity.fulfillProtocolAudit(Protocol.NUTRIENT.id)
-                        if (!activity.nutrientLoggedViaWatch) {
-                            activity.nutrientCount++
-                            activity.persistState()
-                        }
-                        activity.nutrientLoggedViaWatch = false
-                        activity.userContext = "OPTIMIZED NUTRITION VECTOR"
-                        activity.appMode = AppMode.INTERRUPT_RESTORE
-                    }
+    Box(Modifier.fillMaxSize().background(NeonBg)) {
+        Box(Modifier.fillMaxSize().then(if (locked) Modifier.clearAndSetSemantics { } else Modifier)) {
+            VitalityDashboard(activity, logs, audits)
+        }
+
+        if (lockedProtocol != null) {
+            val isPain = activity.painEventActive
+            val restoring = activity.appMode == AppMode.INTERRUPT_RESTORE
+            val showHoldToSkip = canEscape && !isPain && activity.escapeDifficulty == EscapeDifficulty.FIRM
+
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .background(NeonBg.copy(alpha = 0.98f))
+                    .blockTouches()
+                    .systemBarsPadding()
+            ) {
+                LockStatusStrip(
+                    title = when {
+                        isPain -> "PAIN LOG"
+                        restoring -> "DONE // ${lockedProtocol.label}"
+                        else -> "LOCKED // ${lockedProtocol.label}"
+                    },
+                    phase = when (activity.appMode) {
+                        AppMode.INTERRUPT_CAPTURE -> if (isPain) "NOW: DESCRIBE (OPTIONAL)" else "NOW: STATE VECTOR"
+                        AppMode.INTERRUPT_ACTION -> "NOW: EXECUTE"
+                        AppMode.NUTRITION_CAPTURE -> "NOW: LOG MACROS"
+                        AppMode.INTERRUPT_RESTORE -> "NOW: RESUME"
+                        else -> ""
+                    },
+                    rule = when {
+                        isPain -> "SAVED — BACK LEAVES RIGHT AWAY"
+                        restoring -> "TAP ENGAGE TO RETURN TO THE DASHBOARD"
+                        backBlockedFlash -> "BACK IS OFF (FIRM) — HOLD SKIP BELOW FOR ${HOLD_TO_SKIP_MILLIS / 1000}s TO LEAVE"
+                        else -> activity.escapeDifficulty.backRule
+                    },
+                    flash = backBlockedFlash && !isPain && !restoring,
+                    color = if (restoring) NeonGreen else Color(lockedProtocol.colorHex),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
-            } else {
-                InterruptionOverlay(activity)
+
+                Box(Modifier.weight(1f)) {
+                    if (activity.appMode == AppMode.NUTRITION_CAPTURE) {
+                        NutritionOverlay(
+                            onLogMeal = { cal, fat, pro, fiber, sugar ->
+                                // 1. Launch Health Connect push
+                                activity.lifecycleScope.launch(Dispatchers.IO) {
+                                    activity.healthConnectManager.logMeal(
+                                        cal.toDouble(),
+                                        fat.toDouble(),
+                                        pro.toDouble(),
+                                        fiber.toDouble(),
+                                        sugar.toDouble()
+                                    )
+                                }
+                                // 2. Fulfill protocol logic — skip the count bump if
+                                // the watch already logged (and counted) this meal
+                                // locally; we're only here for its macro detail.
+                                activity.fulfillProtocolAudit(Protocol.NUTRIENT.id)
+                                if (!activity.nutrientLoggedViaWatch) {
+                                    activity.nutrientCount++
+                                    activity.persistState()
+                                }
+                                activity.nutrientLoggedViaWatch = false
+                                activity.userContext = "OPTIMIZED NUTRITION VECTOR"
+                                activity.appMode = AppMode.INTERRUPT_RESTORE
+                            }
+                        )
+                    } else {
+                        InterruptionOverlay(activity)
+                    }
+                }
+
+                if (showHoldToSkip) {
+                    HoldToSkipButton(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) { activity.abandonInterruption() }
+                }
             }
         }
 
@@ -186,7 +257,6 @@ fun InterruptionOverlay(activity: MainActivity) {
         modifier = Modifier
             .fillMaxSize()
             .background(NeonBg.copy(alpha = 0.98f))
-            .clickable(enabled = false) {}
             .padding(20.dp),
         contentAlignment = Alignment.Center
     ) {
