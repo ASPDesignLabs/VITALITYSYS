@@ -126,6 +126,11 @@ fun VitalityOrchestrator(activity: MainActivity) {
                     .background(NeonBg.copy(alpha = 0.98f))
                     .blockTouches()
                     .systemBarsPadding()
+                    // Shrink the whole locked layer above the on-screen
+                    // keyboard so the text box and its buttons stay reachable
+                    // (the content area scrolls; the banner and, under FIRM,
+                    // the hold button stay put).
+                    .imePadding()
             ) {
                 LockStatusStrip(
                     title = when {
@@ -260,7 +265,13 @@ fun InterruptionOverlay(activity: MainActivity) {
             .padding(20.dp),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // Scrolls when the content is taller than the space left under the
+        // banner (short phone, photo attached, large font, keyboard open);
+        // when it fits, the Box still centers it exactly as before.
+        Column(
+            modifier = Modifier.verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
 
             // --- PHASE 1: CAPTURE INPUT ---
             if (activity.appMode == AppMode.INTERRUPT_CAPTURE) {
