@@ -350,6 +350,9 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         val now = System.currentTimeMillis()
         store.addPendingPainLog(now, level)
         store.lastPainLevel = level
+        // Logging pain is the answer to a pending follow-up check-in, so clear
+        // its notification (it has its own id; see PAIN_PROTOCOL_ID).
+        (getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager).cancel(PAIN_PROTOCOL_ID)
         flushPainLogs()
         if (level > 3) {
             schedulePainCheck()

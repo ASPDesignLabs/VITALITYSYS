@@ -703,6 +703,19 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         // Activity's (app running), so each message is handled once.
         fun isRunning(): Boolean = activeInstance != null
 
+        // Closes out the pain follow-up check-in once pain has been logged —
+        // on the watch or the phone. Clears its notification and fulfills the
+        // newest same-day PAIN_CHECK audit row (the same first-signal-wins,
+        // same-day rules as every other completion). A no-op if no check-in is
+        // pending, so logging pain unprompted changes nothing.
+        fun markPainCheckDone(context: Context, interactionType: String) {
+            NotificationManagerCompat.from(context).cancel(PAIN_PROTOCOL_ID)
+            val db = VitalityDatabase.getDatabase(context)
+            CoroutineScope(Dispatchers.IO).launch {
+                applyAuditFulfillment(db, PAIN_PROTOCOL_ID, "", interactionType)
+            }
+        }
+
         fun isActivelyRespondingTo(protocolId: Int): Boolean {
             val instance = activeInstance ?: return false
             // Same carve-out as reconcileInFlightOverlay: a pain capture

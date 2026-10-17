@@ -4,6 +4,21 @@ import java.nio.ByteBuffer
 
 // ... Enums remain the same ...
 
+// The pseudo-protocol id pain uses on both devices (pain events on the phone,
+// and the follow-up check-in alert). Not a Protocol: it has no deck, card or
+// color of its own, and the phone's per-protocol HP "bleed" must never apply
+// to it.
+const val PAIN_PROTOCOL_ID = 99
+
+// protocolType stored on the audit rows of the pain follow-up check-in, so it
+// is graded as its own item instead of landing in the CHEMISTRY grade.
+const val PAIN_CHECK_TYPE = "PAIN_CHECK"
+
+// How a stored protocolType (a Protocol name, or PAIN_CHECK_TYPE) is shown.
+fun protocolDisplayLabel(protocolType: String): String =
+    Protocol.values().firstOrNull { it.name == protocolType }?.label
+        ?: if (protocolType == PAIN_CHECK_TYPE) "PAIN CHECK-IN" else protocolType
+
 enum class AppMode { DASHBOARD, INTERRUPT_CAPTURE, INTERRUPT_ACTION, INTERRUPT_RESTORE, NUTRITION_CAPTURE }
 enum class UploadState { IDLE, CONNECTING, UPLOADING, DOWNLOADING, SUCCESS_UPLOAD, SUCCESS_DOWNLOAD }
 

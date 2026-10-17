@@ -735,7 +735,7 @@ private fun taskItemName(config: SysConfig, task: VitalityMath.GradedTask): Stri
 
 @Composable
 private fun TaskReasonRow(task: VitalityMath.GradedTask, config: SysConfig) {
-    val protocolLabel = Protocol.values().firstOrNull { it.name == task.protocolType }?.label ?: task.protocolType
+    val protocolLabel = protocolDisplayLabel(task.protocolType)
     val title = listOfNotNull(protocolLabel, taskItemName(config, task)).joinToString(" · ")
     val whenText = remember(task.firstIssued) {
         val pattern = if (VitalityMath.isSameDay(task.firstIssued, System.currentTimeMillis())) "'TODAY' HH:mm" else "EEE HH:mm"
@@ -866,7 +866,7 @@ fun ComplianceAuditModule(audits: List<NotificationAudit>, config: SysConfig) {
 
                     ConfigLabel("BY PROTOCOL")
                     byProtocol.forEach { (protoName, grade) ->
-                        val label = Protocol.values().firstOrNull { it.name == protoName }?.label ?: protoName
+                        val label = protocolDisplayLabel(protoName)
                         Row(
                             Modifier.fillMaxWidth().padding(vertical = 4.dp),
                             Arrangement.SpaceBetween, Alignment.CenterVertically

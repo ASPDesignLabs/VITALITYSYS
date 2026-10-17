@@ -60,6 +60,8 @@ object WatchMessages {
         val app = context.applicationContext
         CoroutineScope(Dispatchers.IO).launch {
             VitalityDatabase.getDatabase(app).systemDao().savePainLog(event.level, event.loggedAt)
+            // Logging pain answers a pending follow-up check-in, if there is one.
+            MainActivity.markPainCheckDone(app, "WATCH_LOGGED")
             val intent = launchIntent(app).apply {
                 putExtra("PROTOCOL_ID", 99)
                 putExtra("PAIN_LEVEL", event.level)
