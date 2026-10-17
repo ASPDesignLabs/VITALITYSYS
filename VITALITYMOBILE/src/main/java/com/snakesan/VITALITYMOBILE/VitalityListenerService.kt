@@ -53,7 +53,8 @@ class VitalityListenerService : WearableListenerService() {
                 NotificationAudit(
                     notificationId = protocol.id,
                     protocolType = protocol.name,
-                    timestampIssued = issuedAt
+                    timestampIssued = issuedAt,
+                    itemKey = itemKey
                 )
             )
         }

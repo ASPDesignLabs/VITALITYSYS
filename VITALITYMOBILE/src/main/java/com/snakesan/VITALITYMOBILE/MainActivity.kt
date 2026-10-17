@@ -29,6 +29,7 @@ import com.google.android.gms.wearable.*
 import com.snakesan.vitalitysys.data.DailyStats
 import com.snakesan.vitalitysys.data.SystemLog
 import com.snakesan.vitalitysys.data.VitalityDatabase
+import com.snakesan.vitalitysys.data.latestAuditFor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -550,10 +551,10 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     // responded. Also closes out the alert + sticky in-progress notification
     // for this protocol, since "fulfilled" always means there's nothing left
     // to notify about — regardless of which caller reached this point.
-    fun fulfillProtocolAudit(protocolId: Int, interactionType: String = "CLICKED") {
+    fun fulfillProtocolAudit(protocolId: Int, interactionType: String = "CLICKED", itemKey: String = "") {
         NotificationManagerCompat.from(this).cancel(protocolId)
         StickyStatusNotifier.clear(this, protocolId)
-        lifecycleScope.launch(Dispatchers.IO) { applyAuditFulfillment(db, protocolId, interactionType) }
+        lifecycleScope.launch(Dispatchers.IO) { applyAuditFulfillment(db, protocolId, itemKey, interactionType) }
     }
 
     // Cancels an in-flight interrupt without completing it. Used by the
@@ -571,9 +572,13 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             return
         }
         val protocol = activeProtocol
+        val skippedItemKey = pendingItemKey
         if (protocol != null) {
+            // Noted as a skip event, not a verdict: grading looks at whether
+            // (and when) the task ends up finished, so completing it later
+            // from the sticky notification still counts.
             lifecycleScope.launch(Dispatchers.IO) {
-                val audit = db.systemDao().getAuditByNotificationId(protocol.id)
+                val audit = db.systemDao().latestAuditFor(protocol.id, skippedItemKey)
                 if (audit != null && audit.interactionType == null) {
                     db.systemDao().updateAudit(
                         audit.copy(
@@ -647,7 +652,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         fun markCompletedExternally(context: Context, protocol: Protocol, itemKey: String, interactionType: String) {
             val instance = activeInstance
             if (instance != null) {
-                instance.fulfillProtocolAudit(protocol.id, interactionType)
+                instance.fulfillProtocolAudit(protocol.id, interactionType, itemKey)
                 instance.reconcileInFlightOverlay(protocol, itemKey)
             } else {
                 // No live Activity (app fully backgrounded/killed) — cancel
@@ -655,7 +660,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
                 NotificationManagerCompat.from(context).cancel(protocol.id)
                 StickyStatusNotifier.clear(context, protocol.id)
                 val db = VitalityDatabase.getDatabase(context)
-                CoroutineScope(Dispatchers.IO).launch { applyAuditFulfillment(db, protocol.id, interactionType) }
+                CoroutineScope(Dispatchers.IO).launch { applyAuditFulfillment(db, protocol.id, itemKey, interactionType) }
             }
         }
 
@@ -665,9 +670,15 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         // a delayed notification reply arriving after the watch already
         // logged it) must not overwrite *when* or *how* the task actually
         // got done, or silently reclassify a fast response as a late one.
-        private suspend fun applyAuditFulfillment(db: VitalityDatabase, protocolId: Int, interactionType: String) {
-            val audit = db.systemDao().getAuditByNotificationId(protocolId) ?: return
+        private suspend fun applyAuditFulfillment(
+            db: VitalityDatabase, protocolId: Int, itemKey: String, interactionType: String
+        ) {
+            val audit = db.systemDao().latestAuditFor(protocolId, itemKey) ?: return
             val now = System.currentTimeMillis()
+            // An alert from an earlier day is its own, already-ended task
+            // (graded MISSED). Finishing the same item today must not
+            // retroactively rescue it.
+            if (!VitalityMath.isSameDay(audit.timestampIssued, now)) return
             val fulfilledAt = audit.timestampFulfilled ?: now
             val timeDelta = (fulfilledAt - audit.timestampIssued) / 1000
             val finalStat = if (timeDelta > 3600) "CRITICAL_DELAY" else "SUCCESS"

@@ -208,7 +208,7 @@ fun AbandonConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
         title = { Text("SKIP THIS INTERRUPT?", color = NeonPink, fontWeight = FontWeight.Bold) },
         text = {
             Text(
-                "This gets logged as skipped. The reminder for it stays up regardless — it only clears once you actually complete it.",
+                "Skipping is noted, but it isn't final. The reminder stays up, and finishing it later still counts — your grade depends on when you finish, not on skipping.",
                 color = Color.White, fontSize = 13.sp
             )
         },
@@ -361,7 +361,7 @@ fun InterruptionOverlay(activity: MainActivity) {
 
                 CyberButtonBlock("CONFIRM COMPLETION") {
                     // NEW: Stop the fulfillment clock!
-                    activity.fulfillProtocolAudit(protocol.id)
+                    activity.fulfillProtocolAudit(protocol.id, itemKey = activity.pendingItemKey)
 
                     when(protocol) {
                         Protocol.NUTRIENT -> { activity.nutrientCount++; activity.persistState() }
@@ -621,7 +621,7 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
 
         Spacer(Modifier.weight(1f))
 
-        ComplianceAuditModule(audits)
+        ComplianceAuditModule(audits, liveConfig)
         if (showAdmin) {
             DebugPanel(activity)
         }
@@ -694,32 +694,84 @@ fun FocusSettingsModule(activity: MainActivity) {
 }
 
 // --- COMPLIANCE MODULE ---
-// Surfaces VitalityMath.calculateComplianceScore() — overall and broken down
-// by protocol — which previously had no consumer anywhere in the app.
-@Composable
-fun ComplianceAuditModule(audits: List<NotificationAudit>) {
-    var isRevealed by remember { mutableStateOf(false) }
+// Grades per task, not per alert (see the grading notes in VitalityMath), and
+// — because a bare letter says nothing about *why* — can list every task with
+// a plain-language reason underneath it.
+private const val WHY_LIST_LIMIT = 25
 
-    val overall = remember(audits) { VitalityMath.calculateComplianceScore(audits) }
-    val byProtocol = remember(audits) {
-        audits.groupBy { it.protocolType }
-            .mapValues { (_, protoAudits) -> VitalityMath.calculateComplianceScore(protoAudits) }
+private fun outcomeColor(outcome: VitalityMath.TaskOutcome): Color = when (outcome) {
+    VitalityMath.TaskOutcome.ON_TIME -> NeonGreen
+    VitalityMath.TaskOutcome.SLOW -> NeonAmber
+    VitalityMath.TaskOutcome.MISSED -> NeonPink
+    VitalityMath.TaskOutcome.OPEN -> NeonCyan
+}
+
+// Always a text label as well as a color, so the outcome never depends on
+// telling green from amber from pink.
+private fun outcomeLabel(outcome: VitalityMath.TaskOutcome): String = when (outcome) {
+    VitalityMath.TaskOutcome.ON_TIME -> "ON TIME"
+    VitalityMath.TaskOutcome.SLOW -> "SLOW"
+    VitalityMath.TaskOutcome.MISSED -> "MISSED"
+    VitalityMath.TaskOutcome.OPEN -> "OPEN"
+}
+
+// The dose/task's current name, if it still exists in the schedule.
+private fun taskItemName(config: SysConfig, task: VitalityMath.GradedTask): String? {
+    val key = task.itemKey?.takeIf { it.isNotEmpty() } ?: return null
+    config.allDoses().firstOrNull { it.key == key }?.let { return it.medName }
+    return config.hygieneTasks.firstOrNull { SysConfig.hygieneKey(it.id) == key }?.label
+}
+
+@Composable
+private fun TaskReasonRow(task: VitalityMath.GradedTask, config: SysConfig) {
+    val protocolLabel = Protocol.values().firstOrNull { it.name == task.protocolType }?.label ?: task.protocolType
+    val title = listOfNotNull(protocolLabel, taskItemName(config, task)).joinToString(" · ")
+    val whenText = remember(task.firstIssued) {
+        val pattern = if (VitalityMath.isSameDay(task.firstIssued, System.currentTimeMillis())) "'TODAY' HH:mm" else "EEE HH:mm"
+        SimpleDateFormat(pattern, Locale.getDefault()).format(Date(task.firstIssued)).uppercase()
+    }
+
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+            Text(
+                title, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                outcomeLabel(task.outcome), color = outcomeColor(task.outcome),
+                fontSize = 11.sp, fontWeight = FontWeight.Black
+            )
+        }
+        Text("$whenText — ${task.reason}", color = Color.Gray, fontSize = 10.sp, lineHeight = 14.sp)
+    }
+}
+
+@Composable
+fun ComplianceAuditModule(audits: List<NotificationAudit>, config: SysConfig) {
+    var isRevealed by remember { mutableStateOf(false) }
+    var showWhy by remember { mutableStateOf(false) }
+
+    val tasks = remember(audits) { VitalityMath.buildTasks(audits) }
+    val overall = remember(tasks) { VitalityMath.gradeTasks(tasks) }
+    val byProtocol = remember(tasks) {
+        tasks.groupBy { it.protocolType }
+            .mapValues { (_, protoTasks) -> VitalityMath.gradeTasks(protoTasks) }
             .toList()
             .sortedBy { it.first }
     }
 
     // Collapsed-header stats: today's grade plus a rolling 7-day average,
     // so the indicator is meaningful at a glance without expanding it.
-    val todayGrade = remember(audits) {
+    val todayGrade = remember(tasks) {
         val todayStart = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }.timeInMillis
-        VitalityMath.calculateComplianceScore(audits.filter { it.timestampIssued >= todayStart })
+        VitalityMath.gradeTasks(tasks.filter { it.firstIssued >= todayStart })
     }
-    val sevenDayGrade = remember(audits) {
+    val sevenDayGrade = remember(tasks) {
         val sevenDaysAgo = System.currentTimeMillis() - (7L * 86400000L)
-        VitalityMath.calculateComplianceScore(audits.filter { it.timestampIssued >= sevenDaysAgo })
+        VitalityMath.gradeTasks(tasks.filter { it.firstIssued >= sevenDaysAgo })
     }
 
     fun gradeColor(grade: String): Color = when (grade) {
@@ -755,16 +807,16 @@ fun ComplianceAuditModule(audits: List<NotificationAudit>) {
                     Column(horizontalAlignment = Alignment.End) {
                         Text("TODAY", color = Color.Gray, fontSize = 7.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
                         Text(
-                            text = if (todayGrade.totalAlerts > 0) "${todayGrade.grade} ${todayGrade.compliancePercentage}%" else "—",
-                            color = if (todayGrade.totalAlerts > 0) gradeColor(todayGrade.grade) else Color.DarkGray,
+                            text = if (todayGrade.gradedTasks > 0) "${todayGrade.grade} ${todayGrade.compliancePercentage}%" else "—",
+                            color = if (todayGrade.gradedTasks > 0) gradeColor(todayGrade.grade) else Color.DarkGray,
                             fontSize = 11.sp, fontWeight = FontWeight.Black
                         )
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text("7D AVG", color = Color.Gray, fontSize = 7.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
                         Text(
-                            text = if (sevenDayGrade.totalAlerts > 0) "${sevenDayGrade.grade} ${sevenDayGrade.compliancePercentage}%" else "—",
-                            color = if (sevenDayGrade.totalAlerts > 0) gradeColor(sevenDayGrade.grade) else Color.DarkGray,
+                            text = if (sevenDayGrade.gradedTasks > 0) "${sevenDayGrade.grade} ${sevenDayGrade.compliancePercentage}%" else "—",
+                            color = if (sevenDayGrade.gradedTasks > 0) gradeColor(sevenDayGrade.grade) else Color.DarkGray,
                             fontSize = 11.sp, fontWeight = FontWeight.Black
                         )
                     }
@@ -776,7 +828,7 @@ fun ComplianceAuditModule(audits: List<NotificationAudit>) {
             Column(
                 modifier = Modifier.fillMaxWidth().background(Color(0xFF0A0505)).padding(16.dp)
             ) {
-                if (overall.totalAlerts == 0) {
+                if (tasks.isEmpty()) {
                     Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
                         Text("NO ALERT HISTORY YET", color = Color.DarkGray, fontSize = 10.sp)
                     }
@@ -785,9 +837,13 @@ fun ComplianceAuditModule(audits: List<NotificationAudit>) {
                     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                         Text(overall.grade, color = gradeColor(overall.grade), fontSize = 32.sp, fontWeight = FontWeight.Black)
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("${overall.compliancePercentage}% COMPLIANT", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             Text(
-                                "${overall.successCount} OK / ${overall.warningCount} SLOW / ${overall.failureCount} MISSED",
+                                if (overall.gradedTasks > 0) "${overall.compliancePercentage}% COMPLIANT" else "NOTHING GRADED YET",
+                                color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "${overall.onTimeCount} ON TIME / ${overall.slowCount} SLOW / ${overall.missedCount} MISSED" +
+                                    if (overall.openCount > 0) " / ${overall.openCount} OPEN" else "",
                                 color = Color.Gray, fontSize = 10.sp
                             )
                         }
@@ -806,8 +862,34 @@ fun ComplianceAuditModule(audits: List<NotificationAudit>) {
                         ) {
                             Text(label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             Text(
-                                "${grade.grade}  ${grade.compliancePercentage}%  (${grade.totalAlerts})",
+                                if (grade.gradedTasks > 0) "${grade.grade}  ${grade.compliancePercentage}%  (${grade.gradedTasks})"
+                                else "—  (${grade.openCount} open)",
                                 color = gradeColor(grade.grade), fontSize = 11.sp, fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                    SmallActionButton(
+                        if (showWhy) "HIDE WHY" else "SHOW WHY — EACH TASK", NeonPink, Modifier.fillMaxWidth()
+                    ) { showWhy = !showWhy }
+
+                    if (showWhy) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "ON TIME = done within ${VitalityMath.ON_TIME_MINUTES} min of the first alert. " +
+                                "SLOW = done later the same day. MISSED = not done by midnight. " +
+                                "OPEN = not graded yet. Skipped or unanswered alerts are noted, " +
+                                "but only finishing (and when) decides the grade.",
+                            color = Color.Gray, fontSize = 9.sp, lineHeight = 13.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        tasks.take(WHY_LIST_LIMIT).forEach { TaskReasonRow(it, config) }
+                        if (tasks.size > WHY_LIST_LIMIT) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "SHOWING THE LATEST $WHY_LIST_LIMIT OF ${tasks.size}",
+                                color = Color.DarkGray, fontSize = 9.sp, fontWeight = FontWeight.Bold
                             )
                         }
                     }
