@@ -66,13 +66,20 @@ already doing, captures that, and hands it back to you afterward:
 
 Three pieces make this robust rather than just a nice screen flow:
 
+- **A locked screen that says what it's doing.** While a capture/action
+  screen is up, nothing underneath it can be tapped (or reached by a screen
+  reader), and a banner at the top always says what's locked, which step
+  you're on, and what Back does at your current setting — so the rule is
+  never something you have to remember.
 - **Configurable escape difficulty.** A FOCUS settings card lets you pick
   how hard it is to back out of a capture/action screen without finishing
   it — **EASY** (back exits immediately, for when this is just a reminder),
   **STANDARD** (back asks you to confirm skipping first), or **FIRM** (back
-  does nothing; finish it or explicitly abandon it). This is deliberately a
-  dial, not a fixed behavior — steering your own follow-through is the
-  point, not the app deciding for you.
+  does nothing and says so on the banner; finish it, or press and hold SKIP
+  for 3 seconds to leave — there's always a deliberate way out, and it can't
+  be triggered by accident). This is deliberately a dial, not a fixed
+  behavior — steering your own follow-through is the point, not the app
+  deciding for you.
 - **A sticky status notification.** Once you open the app to respond to an
   alert, an ongoing notification tracks both *what alert you're answering*
   and *what you were doing when it interrupted you* — updated as you fill
@@ -87,7 +94,11 @@ Three pieces make this robust rather than just a nice screen flow:
   a watch tap while the phone is mid-capture fast-forwards the phone screen
   instead of leaving a stale "confirm" button up, and a watch action taken
   while briefly disconnected is queued and retried rather than silently
-  dropped.
+  dropped. This works with the phone app closed too: a pain log is saved
+  immediately (with a quiet "tap to add details" notification), a finished
+  task closes its audit row and clears its reminders, and the watch's counts
+  are merged into the phone's — never overwriting something the phone did
+  itself, like a notification quick-reply.
 
 ## Pain / symptom logging
 
@@ -98,16 +109,37 @@ available here too). Logging above level 3 automatically schedules a
 window — which can itself be overridden with a "clinical override" setting
 for round-the-clock monitoring.
 
+The level is saved the moment the phone receives it (0 = "resolved" counts
+too); the description screen afterwards is optional and only fills in the
+note. Backing out of it is always immediate, whatever the escape setting,
+and never loses the entry or touches a medication alert.
+
 ## Compliance auditing + PDF export
 
 Every alert fired is written to a `notification_audit` row (issued →
-interacted → fulfilled timestamps, interaction type, and which device
-responded). Each one is graded Success/Warning/Failure and rolled into a
-per-protocol A–F compliance score, viewable in-app or exported as a
-multi-page PDF ("Behavioral Audit" or a separate light-mode "Clinical
-Report") — 24h/7d/30d alert volume and slippage-rate summaries, per-protocol
-average response latency, a worst-hour-for-abandoned-alerts callout, and a
-response-latency histogram — handed off to the OS share sheet.
+interacted → fulfilled timestamps, interaction type, which device responded,
+and which dose/task it was about). Repeated alerts for the same dose or task
+are chained into **one task**, and each task gets one outcome:
+
+| Outcome | Meaning | Score |
+|---|---|---|
+| **ON TIME** | finished within 60 min of the first alert | 1.0 |
+| **SLOW** | finished later, but the same day | 0.5 |
+| **MISSED** | not finished by midnight | 0 |
+| **OPEN** | not finished yet, day isn't over — not graded yet | — |
+
+Skipped or unanswered alerts are noted but never decide the outcome: finishing
+(and when) is what counts. How fast you first tapped is shown but doesn't
+change the grade. Tasks roll up into a per-protocol A–F score, and the
+COMPLIANCE card can list every task with a plain-language reason ("Done 1h
+10m after the first alert — past the 60m mark (5 alerts, 4 unanswered).").
+
+The audit is viewable in-app or exported as a multi-page PDF ("Behavioral
+Audit" or a separate light-mode "Clinical Report") — 24h/7d/30d alert volume
+and slippage-rate summaries, per-protocol average response latency, a
+worst-hour-for-abandoned-alerts callout, and a response-latency histogram —
+handed off to the OS share sheet. *Note: the PDF's figures are still counted
+per alert, not per task, so they won't match the in-app grade exactly.*
 
 ## Background behavior
 

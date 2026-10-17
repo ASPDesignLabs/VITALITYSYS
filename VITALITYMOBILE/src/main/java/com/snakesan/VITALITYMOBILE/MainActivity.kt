@@ -27,10 +27,13 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.google.android.gms.wearable.*
 import com.snakesan.vitalitysys.data.DailyStats
-import com.snakesan.vitalitysys.data.SystemLog
 import com.snakesan.vitalitysys.data.VitalityDatabase
+import com.snakesan.vitalitysys.data.latestAuditFor
+import com.snakesan.vitalitysys.data.savePainLog
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -75,6 +78,15 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
 
     private val activeDebugBleeds = mutableStateMapOf<Int, Long>()
     var pendingPainLevel by mutableIntStateOf(0)
+    // True while the pain-description screen is up. Tracked separately from
+    // pendingPainLevel because 0 ("RESOLVED") is a valid pain level — keying
+    // off `level > 0` made a resolved log open a bogus CHEMISTRY interrupt
+    // and save nothing.
+    var painEventActive by mutableStateOf(false)
+    // The saved row for the pain event on screen. The level is written the
+    // moment the event arrives (see savePainEvent), so the description screen
+    // only ever updates this row's note — escaping it can't lose the entry.
+    private var pendingPainLogId: Deferred<Long>? = null
 
     var rangeStart by mutableLongStateOf(System.currentTimeMillis() - 604800000L)
     var rangeEnd by mutableLongStateOf(System.currentTimeMillis())
@@ -180,7 +192,6 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         overchargeStartTime = prefs.getLong("overcharge_start", 0L)
 
         db = VitalityDatabase.getDatabase(this)
-        activeInstance = this
 
         // --- LOAD STATE FROM DB ---
         lifecycleScope.launch {
@@ -207,6 +218,10 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
 
         Wearable.getMessageClient(this).addListener(this)
         Wearable.getDataClient(this).addListener(this)
+        // Only now does the app count as "running" to the background fallback
+        // (see WatchMessages): set any earlier and a watch message landing in
+        // the gap would be skipped by the service yet not heard by us either.
+        activeInstance = this
         handleIntent(intent)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -404,11 +419,18 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             completedViaWatch = false
             if (protoId == 99) {
                 val level = intent.getIntExtra("PAIN_LEVEL", 0)
+                val loggedAt = intent.getLongExtra("PAIN_TS", 0L).takeIf { it > 0L }
+                    ?: System.currentTimeMillis()
                 pendingPainLevel = level
+                painEventActive = true
                 appMode = AppMode.INTERRUPT_CAPTURE
                 userContext = ""
                 userContextPhotoUri = null
                 activeProtocol = Protocol.CHEMISTRY
+                savePainEvent(level, loggedAt)
+                // The screen is up now, so the "tap to add details" prompt
+                // (see WatchMessages.recordPain) has done its job.
+                WatchMessages.cancelPainNotification(this)
             } else if (protoId != -1) {
                 val protocol = Protocol.values().find { it.id == protoId }
                 activeProtocol = protocol
@@ -432,6 +454,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
                         userContext = ""
                         userContextPhotoUri = null
                         appMode = AppMode.NUTRITION_CAPTURE
+                        WatchMessages.cancelMealNotification(this)
                         // A watch-triggered meal log isn't "responding to an
                         // interruption" — there's no captured context to nag
                         // about, just macro detail left to fill in.
@@ -451,19 +474,28 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
 
     override fun onDestroy() {
         super.onDestroy()
+        // Clear "running" first, then stop listening: in the gap, the service
+        // fallback and our listener may both see a message (harmless — every
+        // handler here is idempotent) rather than neither (a lost message).
+        if (activeInstance === this) activeInstance = null
         Wearable.getMessageClient(this).removeListener(this)
         Wearable.getDataClient(this).removeListener(this)
-        if (activeInstance === this) activeInstance = null
     }
 
     override fun onMessageReceived(event: MessageEvent) {
         if (event.path == "/sys/pain_log") {
-            val buffer = ByteBuffer.wrap(event.data)
-            val painLevel = buffer.int
+            val pain = PainLogEvent.fromBytes(event.data)
+            // Save the level (and leave a "tap to add details" notification)
+            // BEFORE trying to open the screen: Android can refuse to launch
+            // an Activity while the app is in the background, and the entry
+            // must not depend on that launch succeeding. The screen, if it
+            // does open, reuses this same row and clears the notification.
+            WatchMessages.recordPain(this, pain)
             val intent = Intent(this, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 putExtra("PROTOCOL_ID", 99)
-                putExtra("PAIN_LEVEL", painLevel)
+                putExtra("PAIN_LEVEL", pain.level)
+                putExtra("PAIN_TS", pain.loggedAt)
             }
             startActivity(intent)
         }
@@ -483,6 +515,8 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
                 // trail, then force the phone open so the user can enter the
                 // macro detail only the phone UI supports.
                 markCompletedExternally(this, Protocol.NUTRIENT, "", "WATCH_LOGGED")
+                // Same "the launch below may be refused" safety net as pain.
+                WatchMessages.notifyMealLogged(this)
                 val intent = Intent(this, MainActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                     putExtra("PROTOCOL_ID", Protocol.NUTRIENT.id)
@@ -531,10 +565,10 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     // responded. Also closes out the alert + sticky in-progress notification
     // for this protocol, since "fulfilled" always means there's nothing left
     // to notify about — regardless of which caller reached this point.
-    fun fulfillProtocolAudit(protocolId: Int, interactionType: String = "CLICKED") {
+    fun fulfillProtocolAudit(protocolId: Int, interactionType: String = "CLICKED", itemKey: String = "") {
         NotificationManagerCompat.from(this).cancel(protocolId)
         StickyStatusNotifier.clear(this, protocolId)
-        lifecycleScope.launch(Dispatchers.IO) { applyAuditFulfillment(db, protocolId, interactionType) }
+        lifecycleScope.launch(Dispatchers.IO) { applyAuditFulfillment(db, protocolId, itemKey, interactionType) }
     }
 
     // Cancels an in-flight interrupt without completing it. Used by the
@@ -543,10 +577,22 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     // or sticky in-progress notifications — the task is still undone, so the
     // nag should keep standing until it's actually fulfilled.
     fun abandonInterruption() {
+        // A pain event has nothing to skip: its level is already saved, and
+        // it isn't tied to any alert audit (it only borrows CHEMISTRY's id
+        // and color for styling), so leaving must not touch a real dose
+        // alert's audit row.
+        if (painEventActive) {
+            closePainEvent()
+            return
+        }
         val protocol = activeProtocol
+        val skippedItemKey = pendingItemKey
         if (protocol != null) {
+            // Noted as a skip event, not a verdict: grading looks at whether
+            // (and when) the task ends up finished, so completing it later
+            // from the sticky notification still counts.
             lifecycleScope.launch(Dispatchers.IO) {
-                val audit = db.systemDao().getAuditByNotificationId(protocol.id)
+                val audit = db.systemDao().latestAuditFor(protocol.id, skippedItemKey)
                 if (audit != null && audit.interactionType == null) {
                     db.systemDao().updateAudit(
                         audit.copy(
@@ -581,7 +627,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         // for styling — it isn't actually responding to any CHEMISTRY alert,
         // so a real chemistry-dose completion arriving mid-pain-capture must
         // not yank the user out of describing their symptoms.
-        if (pendingPainLevel > 0) return
+        if (painEventActive) return
         val matches = (appMode == AppMode.INTERRUPT_CAPTURE || appMode == AppMode.INTERRUPT_ACTION) &&
             activeProtocol == protocol &&
             (itemKey.isEmpty() || itemKey == pendingItemKey)
@@ -600,13 +646,19 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         // running Activity. Cleared in onDestroy.
         @Volatile private var activeInstance: MainActivity? = null
 
+        // True while a MainActivity exists and is listening for watch messages
+        // itself. VitalityListenerService / WatchMessages use this to decide
+        // whether a watch message is theirs to handle (app closed) or the live
+        // Activity's (app running), so each message is handled once.
+        fun isRunning(): Boolean = activeInstance != null
+
         fun isActivelyRespondingTo(protocolId: Int): Boolean {
             val instance = activeInstance ?: return false
             // Same carve-out as reconcileInFlightOverlay: a pain capture
             // borrows CHEMISTRY's id/color without actually responding to a
             // CHEMISTRY alert, so it must not shield an unrelated real
             // chemistry-dose notification from being recorded as dismissed.
-            if (instance.pendingPainLevel > 0) return false
+            if (instance.painEventActive) return false
             return instance.appMode != AppMode.DASHBOARD && instance.activeProtocol?.id == protocolId
         }
 
@@ -620,7 +672,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         fun markCompletedExternally(context: Context, protocol: Protocol, itemKey: String, interactionType: String) {
             val instance = activeInstance
             if (instance != null) {
-                instance.fulfillProtocolAudit(protocol.id, interactionType)
+                instance.fulfillProtocolAudit(protocol.id, interactionType, itemKey)
                 instance.reconcileInFlightOverlay(protocol, itemKey)
             } else {
                 // No live Activity (app fully backgrounded/killed) — cancel
@@ -628,7 +680,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
                 NotificationManagerCompat.from(context).cancel(protocol.id)
                 StickyStatusNotifier.clear(context, protocol.id)
                 val db = VitalityDatabase.getDatabase(context)
-                CoroutineScope(Dispatchers.IO).launch { applyAuditFulfillment(db, protocol.id, interactionType) }
+                CoroutineScope(Dispatchers.IO).launch { applyAuditFulfillment(db, protocol.id, itemKey, interactionType) }
             }
         }
 
@@ -638,9 +690,15 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         // a delayed notification reply arriving after the watch already
         // logged it) must not overwrite *when* or *how* the task actually
         // got done, or silently reclassify a fast response as a late one.
-        private suspend fun applyAuditFulfillment(db: VitalityDatabase, protocolId: Int, interactionType: String) {
-            val audit = db.systemDao().getAuditByNotificationId(protocolId) ?: return
+        private suspend fun applyAuditFulfillment(
+            db: VitalityDatabase, protocolId: Int, itemKey: String, interactionType: String
+        ) {
+            val audit = db.systemDao().latestAuditFor(protocolId, itemKey) ?: return
             val now = System.currentTimeMillis()
+            // An alert from an earlier day is its own, already-ended task
+            // (graded MISSED). Finishing the same item today must not
+            // retroactively rescue it.
+            if (!VitalityMath.isSameDay(audit.timestampIssued, now)) return
             val fulfilledAt = audit.timestampFulfilled ?: now
             val timeDelta = (fulfilledAt - audit.timestampIssued) / 1000
             val finalStat = if (timeDelta > 3600) "CRITICAL_DELAY" else "SUCCESS"
@@ -657,23 +715,43 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
 
     // Now these functions are safely back in the main class:
 
+    // Makes sure the pain level is saved (with a placeholder note) and keeps
+    // the row's id for the description screen to fill in. Usually the message
+    // handler has already written it (see WatchMessages.recordPain); savePainLog
+    // is keyed on the watch's own timestamp, so this reuses that row — and a
+    // re-delivered event or re-created Activity does too — instead of logging
+    // it twice. Runs outside lifecycleScope on purpose: the write must still
+    // finish if the Activity goes away right after.
+    private fun savePainEvent(level: Int, loggedAt: Long) {
+        pendingPainLogId = CoroutineScope(Dispatchers.IO).async {
+            db.systemDao().savePainLog(level, loggedAt)
+        }
+    }
+
+    // Attaches the typed/photo description to the already-saved pain row.
     fun commitPainLog(note: String) {
+        val saved = pendingPainLogId
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
-                db.systemDao().insertLog(
-                    SystemLog(
-                        timestamp = System.currentTimeMillis(),
-                        type = "PAIN",
-                        value = pendingPainLevel,
-                        note = note
-                    )
-                )
+                val id = runCatching { saved?.await() }.getOrNull()
+                if (id != null) db.systemDao().updateLogNote(id, note)
             }
-            pendingPainLevel = 0
-            appMode = AppMode.DASHBOARD
-            activeProtocol = null
-            userContextPhotoUri = null
+            closePainEvent()
         }
+    }
+
+    // Ends the pain screen without touching any audit or notification state.
+    fun closePainEvent() {
+        // Belt and braces: the prompt can be posted a moment after the screen
+        // opened (the save runs on another thread), so clear it here too.
+        WatchMessages.cancelPainNotification(this)
+        pendingPainLevel = 0
+        painEventActive = false
+        pendingPainLogId = null
+        appMode = AppMode.DASHBOARD
+        activeProtocol = null
+        userContext = ""
+        userContextPhotoUri = null
     }
 
     // Quick-purge, surgical-deletion, factory-reset, and fuzzy-data-injection

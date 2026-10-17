@@ -13,6 +13,9 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import com.google.android.gms.wearable.DataEvent
+import com.google.android.gms.wearable.DataEventBuffer
+import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
 import com.snakesan.vitalitysys.data.NotificationAudit
@@ -39,6 +42,43 @@ class VitalityListenerService : WearableListenerService() {
                 triggerNotification(protocol, alert.itemKey, alert.message)
             }
         }
+
+        // Pain logs and task completions from the watch. MainActivity handles
+        // these itself while it's running; these are the fallback for when it
+        // isn't (see WatchMessages for why and how). A malformed payload must
+        // never take the app down from a background callback.
+        if (event.path == "/sys/pain_log") {
+            runCatching { PainLogEvent.fromBytes(event.data) }.getOrNull()
+                ?.let { WatchMessages.handlePainWhenClosed(this, it) }
+        }
+
+        if (event.path == "/sys/telemetry") {
+            runCatching { TelemetryEvent.fromBytes(event.data) }.getOrNull()
+                ?.let { WatchMessages.handleTelemetryWhenClosed(this, it) }
+        }
+    }
+
+    // The watch's authoritative counts + completed dose/task keys. Applied by
+    // MainActivity while it's running; written straight to the database here
+    // when it isn't, so the phone (and HeartbeatWorker's HP maths) doesn't go
+    // on using stale numbers.
+    override fun onDataChanged(dataEvents: DataEventBuffer) {
+        super.onDataChanged(dataEvents)
+        dataEvents.forEach { event ->
+            if (event.type == DataEvent.TYPE_CHANGED && event.dataItem.uri.path == "/vitality_state") {
+                // Values must be read before this callback returns — the
+                // buffer is released after it.
+                val map = DataMapItem.fromDataItem(event.dataItem).dataMap
+                if (map.containsKey("nutrients") && map.containsKey("hydration")) {
+                    WatchMessages.applyStateWhenClosed(
+                        this,
+                        nutrients = map.getInt("nutrients"),
+                        hydration = map.getInt("hydration"),
+                        completedKeys = map.getString("completedKeys") ?: ""
+                    )
+                }
+            }
+        }
     }
 
     private fun triggerNotification(protocol: Protocol, itemKey: String, message: String) {
@@ -53,7 +93,8 @@ class VitalityListenerService : WearableListenerService() {
                 NotificationAudit(
                     notificationId = protocol.id,
                     protocolType = protocol.name,
-                    timestampIssued = issuedAt
+                    timestampIssued = issuedAt,
+                    itemKey = itemKey
                 )
             )
         }

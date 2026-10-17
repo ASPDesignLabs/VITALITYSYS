@@ -7,6 +7,10 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.material3.*
@@ -14,13 +18,25 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 
 private val MIN_TOUCH_TARGET = 44.dp
 
@@ -159,6 +175,122 @@ fun NeonToggle(
                 .offset(x = thumbOffset)
                 .size(20.dp)
                 .background(if (checked) activeColor else Color.Gray, CutCornerShape(3.dp))
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// LOCK CHROME (shared by the interrupt and nutrition overlays)
+// ---------------------------------------------------------------------------
+
+// Swallows every touch that lands on it, so nothing underneath an overlay can
+// be tapped or scrolled while it's up. A sibling drawn on top only blocks
+// what's below it if something on it actually handles pointer input — a plain
+// background (or `clickable(enabled = false)`) lets touches fall through.
+fun Modifier.blockTouches(): Modifier = pointerInput(Unit) { detectTapGestures { } }
+
+const val HOLD_TO_SKIP_MILLIS = 3000
+
+// One-line "what's locked, where am I, how do I leave" banner pinned to the
+// top of every locked screen. The second line is also where a blocked Back
+// press explains itself (flash = true), so a dead button is never silent.
+@Composable
+fun LockStatusStrip(
+    title: String,
+    phase: String,
+    rule: String,
+    flash: Boolean,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(VitalityShape)
+            .background(color.copy(alpha = 0.08f))
+            .border(1.dp, color.copy(alpha = 0.5f), VitalityShape)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            // Polite live region: TalkBack announces the phase/rule when it
+            // changes, so a screen-reader user isn't left guessing either.
+            .semantics { liveRegion = LiveRegionMode.Polite }
+    ) {
+        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+            Text(title, color = color, fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+            Text(phase, color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            rule,
+            color = if (flash) NeonPink else Color.LightGray,
+            fontSize = 11.sp,
+            fontWeight = if (flash) FontWeight.Black else FontWeight.Bold
+        )
+    }
+}
+
+// The deliberate way out under FIRM: press and hold for HOLD_TO_SKIP_MILLIS
+// with a visible fill + countdown; letting go early resets it. Back stays
+// off, but this guarantees there is always a way out that can't happen by
+// accident.
+@Composable
+fun HoldToSkipButton(modifier: Modifier = Modifier, onSkip: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    val progress = remember { Animatable(0f) }
+    var holding by remember { mutableStateOf(false) }
+    val currentOnSkip by rememberUpdatedState(onSkip)
+    val totalSeconds = HOLD_TO_SKIP_MILLIS / 1000
+    val secondsLeft = kotlin.math.ceil((1f - progress.value) * totalSeconds).toInt().coerceIn(1, totalSeconds)
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clip(VitalityShape)
+            .background(NeonPink.copy(alpha = 0.06f))
+            // The progress fill is DRAWN, not a child Box. A child with
+            // fillMaxHeight() inside a wrap-content parent asks for all the
+            // height it's offered, so the button grew to fill the screen and
+            // squeezed the capture content to zero height.
+            .drawBehind {
+                drawRect(NeonPink.copy(alpha = 0.35f), size = Size(size.width * progress.value, size.height))
+            }
+            .border(1.dp, NeonPink, VitalityShape)
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown()
+                    holding = true
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    val fill = scope.launch {
+                        progress.snapTo(0f)
+                        progress.animateTo(1f, tween(HOLD_TO_SKIP_MILLIS, easing = LinearEasing))
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        currentOnSkip()
+                    }
+                    waitForUpOrCancellation()
+                    holding = false
+                    if (fill.isActive) {
+                        fill.cancel()
+                        scope.launch { progress.animateTo(0f, tween(150)) }
+                    }
+                }
+            }
+            // A timed press-and-hold can't be done with every assistive
+            // setup (switch access, some TalkBack gestures), so screen readers
+            // get the same exit as a plain action instead of being trapped.
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                contentDescription = "Hold for $totalSeconds seconds to skip this interrupt"
+                customActions = listOf(CustomAccessibilityAction("Skip this interrupt") { currentOnSkip(); true })
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            if (holding) "KEEP HOLDING… $secondsLeft" else "HOLD ${totalSeconds}s TO SKIP",
+            color = NeonPink,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 2.sp
         )
     }
 }

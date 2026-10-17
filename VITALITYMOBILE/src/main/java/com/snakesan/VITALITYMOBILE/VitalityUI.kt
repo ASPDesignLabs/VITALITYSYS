@@ -26,6 +26,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -37,6 +38,7 @@ import com.snakesan.vitalitysys.data.SystemLog
 import com.snakesan.vitalitysys.debug.DebugFlags
 import com.snakesan.vitalitysys.debug.DebugPanel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -57,6 +59,19 @@ fun VitalityOrchestrator(activity: MainActivity) {
     val haptic = LocalHapticFeedback.current
     var showAbandonConfirm by remember { mutableStateOf(false) }
 
+    // Under FIRM, a Back press does nothing — so each press flashes the lock
+    // banner with *why*, for a few seconds, instead of failing silently. The
+    // counter (not a boolean) is the effect key so every press restarts it.
+    var backBlockedCount by remember { mutableIntStateOf(0) }
+    var backBlockedFlash by remember { mutableStateOf(false) }
+    LaunchedEffect(backBlockedCount) {
+        if (backBlockedCount > 0) {
+            backBlockedFlash = true
+            delay(3000)
+            backBlockedFlash = false
+        }
+    }
+
     // Whether backing out right now would abandon an in-flight interrupt at
     // all — INTERRUPT_RESTORE is excluded because the protocol is already
     // fulfilled by that point, so there's nothing left an escape could skip.
@@ -70,45 +85,109 @@ fun VitalityOrchestrator(activity: MainActivity) {
     // notification, which never clears from an escape — only from actually
     // finishing the protocol.
     BackHandler(enabled = canEscape) {
+        // A pain event's level is already saved before this screen shows, so
+        // there's nothing to protect: Back leaves right away at every tier.
+        // (Forcing someone logging pain to describe it first would be a trap,
+        // not a nudge.)
+        if (activity.painEventActive) {
+            activity.closePainEvent()
+            return@BackHandler
+        }
         when (activity.escapeDifficulty) {
             EscapeDifficulty.EASY -> activity.abandonInterruption()
             EscapeDifficulty.STANDARD -> showAbandonConfirm = true
-            EscapeDifficulty.FIRM -> haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            EscapeDifficulty.FIRM -> {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                backBlockedCount++
+            }
         }
     }
 
-    Box(Modifier.fillMaxSize().background(NeonBg)) {
-        VitalityDashboard(activity, logs, audits)
+    // The "lock": while an interrupt (or the nutrition log) is up, the whole
+    // screen is taken over — touches can't reach the dashboard underneath,
+    // screen readers can't wander into it either, and a banner keeps saying
+    // what's locked, which step you're on, and exactly how to leave.
+    val lockedProtocol = activity.activeProtocol?.takeIf { activity.appMode != AppMode.DASHBOARD }
+    val locked = lockedProtocol != null
 
-        if (activity.appMode != AppMode.DASHBOARD && activity.activeProtocol != null) {
-            if (activity.appMode == AppMode.NUTRITION_CAPTURE) {
-                NutritionOverlay(
-                    onLogMeal = { cal, fat, pro, fiber, sugar ->
-                        // 1. Launch Health Connect push
-                        activity.lifecycleScope.launch(Dispatchers.IO) {
-                            activity.healthConnectManager.logMeal(
-                                cal.toDouble(),
-                                fat.toDouble(),
-                                pro.toDouble(),
-                                fiber.toDouble(),
-                                sugar.toDouble()
-                            )
-                        }
-                        // 2. Fulfill protocol logic — skip the count bump if
-                        // the watch already logged (and counted) this meal
-                        // locally; we're only here for its macro detail.
-                        activity.fulfillProtocolAudit(Protocol.NUTRIENT.id)
-                        if (!activity.nutrientLoggedViaWatch) {
-                            activity.nutrientCount++
-                            activity.persistState()
-                        }
-                        activity.nutrientLoggedViaWatch = false
-                        activity.userContext = "OPTIMIZED NUTRITION VECTOR"
-                        activity.appMode = AppMode.INTERRUPT_RESTORE
-                    }
+    Box(Modifier.fillMaxSize().background(NeonBg)) {
+        Box(Modifier.fillMaxSize().then(if (locked) Modifier.clearAndSetSemantics { } else Modifier)) {
+            VitalityDashboard(activity, logs, audits)
+        }
+
+        if (lockedProtocol != null) {
+            val isPain = activity.painEventActive
+            val restoring = activity.appMode == AppMode.INTERRUPT_RESTORE
+            val showHoldToSkip = canEscape && !isPain && activity.escapeDifficulty == EscapeDifficulty.FIRM
+
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .background(NeonBg.copy(alpha = 0.98f))
+                    .blockTouches()
+                    .systemBarsPadding()
+            ) {
+                LockStatusStrip(
+                    title = when {
+                        isPain -> "PAIN LOG"
+                        restoring -> "DONE // ${lockedProtocol.label}"
+                        else -> "LOCKED // ${lockedProtocol.label}"
+                    },
+                    phase = when (activity.appMode) {
+                        AppMode.INTERRUPT_CAPTURE -> if (isPain) "NOW: DESCRIBE (OPTIONAL)" else "NOW: STATE VECTOR"
+                        AppMode.INTERRUPT_ACTION -> "NOW: EXECUTE"
+                        AppMode.NUTRITION_CAPTURE -> "NOW: LOG MACROS"
+                        AppMode.INTERRUPT_RESTORE -> "NOW: RESUME"
+                        else -> ""
+                    },
+                    rule = when {
+                        isPain -> "SAVED — BACK LEAVES RIGHT AWAY"
+                        restoring -> "TAP ENGAGE TO RETURN TO THE DASHBOARD"
+                        backBlockedFlash -> "BACK IS OFF (FIRM) — HOLD SKIP BELOW FOR ${HOLD_TO_SKIP_MILLIS / 1000}s TO LEAVE"
+                        else -> activity.escapeDifficulty.backRule
+                    },
+                    flash = backBlockedFlash && !isPain && !restoring,
+                    color = if (restoring) NeonGreen else Color(lockedProtocol.colorHex),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
-            } else {
-                InterruptionOverlay(activity)
+
+                Box(Modifier.weight(1f)) {
+                    if (activity.appMode == AppMode.NUTRITION_CAPTURE) {
+                        NutritionOverlay(
+                            onLogMeal = { cal, fat, pro, fiber, sugar ->
+                                // 1. Launch Health Connect push
+                                activity.lifecycleScope.launch(Dispatchers.IO) {
+                                    activity.healthConnectManager.logMeal(
+                                        cal.toDouble(),
+                                        fat.toDouble(),
+                                        pro.toDouble(),
+                                        fiber.toDouble(),
+                                        sugar.toDouble()
+                                    )
+                                }
+                                // 2. Fulfill protocol logic — skip the count bump if
+                                // the watch already logged (and counted) this meal
+                                // locally; we're only here for its macro detail.
+                                activity.fulfillProtocolAudit(Protocol.NUTRIENT.id)
+                                if (!activity.nutrientLoggedViaWatch) {
+                                    activity.nutrientCount++
+                                    activity.persistState()
+                                }
+                                activity.nutrientLoggedViaWatch = false
+                                activity.userContext = "OPTIMIZED NUTRITION VECTOR"
+                                activity.appMode = AppMode.INTERRUPT_RESTORE
+                            }
+                        )
+                    } else {
+                        InterruptionOverlay(activity)
+                    }
+                }
+
+                if (showHoldToSkip) {
+                    HoldToSkipButton(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) { activity.abandonInterruption() }
+                }
             }
         }
 
@@ -129,7 +208,7 @@ fun AbandonConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
         title = { Text("SKIP THIS INTERRUPT?", color = NeonPink, fontWeight = FontWeight.Bold) },
         text = {
             Text(
-                "This gets logged as skipped. The reminder for it stays up regardless — it only clears once you actually complete it.",
+                "Skipping is noted, but it isn't final. The reminder stays up, and finishing it later still counts — your grade depends on when you finish, not on skipping.",
                 color = Color.White, fontSize = 13.sp
             )
         },
@@ -171,14 +250,13 @@ fun PhotoThumbnail(uri: Uri, modifier: Modifier = Modifier) {
 
 @Composable
 fun InterruptionOverlay(activity: MainActivity) {
-    val isPainEvent = activity.pendingPainLevel > 0
+    val isPainEvent = activity.painEventActive
     val painLevel = activity.pendingPainLevel
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(NeonBg.copy(alpha = 0.98f))
-            .clickable(enabled = false) {}
             .padding(20.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -187,9 +265,20 @@ fun InterruptionOverlay(activity: MainActivity) {
             // --- PHASE 1: CAPTURE INPUT ---
             if (activity.appMode == AppMode.INTERRUPT_CAPTURE) {
                 Text(
-                    text = if (isPainEvent) "PAIN EVENT DETECTED (LVL $painLevel)" else "INTERRUPT DETECTED",
+                    text = when {
+                        !isPainEvent -> "INTERRUPT DETECTED"
+                        painLevel == 0 -> "PAIN RESOLVED (LVL 0)"
+                        else -> "PAIN EVENT DETECTED (LVL $painLevel)"
+                    },
                     color = NeonPink, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp
                 )
+                if (isPainEvent) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "✓ LEVEL SAVED — DETAILS ARE OPTIONAL", color = NeonGreen,
+                        fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp
+                    )
+                }
                 Spacer(Modifier.height(20.dp))
 
                 Text(
@@ -233,7 +322,7 @@ fun InterruptionOverlay(activity: MainActivity) {
 
                 Spacer(Modifier.height(30.dp))
 
-                CyberButtonBlock(if (isPainEvent) "LOG DATA & RESUME" else "LOCK VECTOR") {
+                CyberButtonBlock(if (isPainEvent) "ADD DETAILS & RESUME" else "LOCK VECTOR") {
                     if (isPainEvent) {
                         val note = text.ifEmpty { "No details provided" } + if (photoUri != null) " [+photo]" else ""
                         activity.commitPainLog(note)
@@ -244,6 +333,13 @@ fun InterruptionOverlay(activity: MainActivity) {
                             activity, activity.activeProtocol!!, activity.pendingItemKey,
                             activity.userContext, "ACTION", photoUri?.toString()
                         )
+                    }
+                }
+
+                if (isPainEvent) {
+                    Spacer(Modifier.height(12.dp))
+                    SmallActionButton("DONE — NO DETAILS", Color.Gray, Modifier.fillMaxWidth()) {
+                        activity.closePainEvent()
                     }
                 }
             }
@@ -265,7 +361,7 @@ fun InterruptionOverlay(activity: MainActivity) {
 
                 CyberButtonBlock("CONFIRM COMPLETION") {
                     // NEW: Stop the fulfillment clock!
-                    activity.fulfillProtocolAudit(protocol.id)
+                    activity.fulfillProtocolAudit(protocol.id, itemKey = activity.pendingItemKey)
 
                     when(protocol) {
                         Protocol.NUTRIENT -> { activity.nutrientCount++; activity.persistState() }
@@ -525,7 +621,7 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
 
         Spacer(Modifier.weight(1f))
 
-        ComplianceAuditModule(audits)
+        ComplianceAuditModule(audits, liveConfig)
         if (showAdmin) {
             DebugPanel(activity)
         }
@@ -598,32 +694,84 @@ fun FocusSettingsModule(activity: MainActivity) {
 }
 
 // --- COMPLIANCE MODULE ---
-// Surfaces VitalityMath.calculateComplianceScore() — overall and broken down
-// by protocol — which previously had no consumer anywhere in the app.
-@Composable
-fun ComplianceAuditModule(audits: List<NotificationAudit>) {
-    var isRevealed by remember { mutableStateOf(false) }
+// Grades per task, not per alert (see the grading notes in VitalityMath), and
+// — because a bare letter says nothing about *why* — can list every task with
+// a plain-language reason underneath it.
+private const val WHY_LIST_LIMIT = 25
 
-    val overall = remember(audits) { VitalityMath.calculateComplianceScore(audits) }
-    val byProtocol = remember(audits) {
-        audits.groupBy { it.protocolType }
-            .mapValues { (_, protoAudits) -> VitalityMath.calculateComplianceScore(protoAudits) }
+private fun outcomeColor(outcome: VitalityMath.TaskOutcome): Color = when (outcome) {
+    VitalityMath.TaskOutcome.ON_TIME -> NeonGreen
+    VitalityMath.TaskOutcome.SLOW -> NeonAmber
+    VitalityMath.TaskOutcome.MISSED -> NeonPink
+    VitalityMath.TaskOutcome.OPEN -> NeonCyan
+}
+
+// Always a text label as well as a color, so the outcome never depends on
+// telling green from amber from pink.
+private fun outcomeLabel(outcome: VitalityMath.TaskOutcome): String = when (outcome) {
+    VitalityMath.TaskOutcome.ON_TIME -> "ON TIME"
+    VitalityMath.TaskOutcome.SLOW -> "SLOW"
+    VitalityMath.TaskOutcome.MISSED -> "MISSED"
+    VitalityMath.TaskOutcome.OPEN -> "OPEN"
+}
+
+// The dose/task's current name, if it still exists in the schedule.
+private fun taskItemName(config: SysConfig, task: VitalityMath.GradedTask): String? {
+    val key = task.itemKey?.takeIf { it.isNotEmpty() } ?: return null
+    config.allDoses().firstOrNull { it.key == key }?.let { return it.medName }
+    return config.hygieneTasks.firstOrNull { SysConfig.hygieneKey(it.id) == key }?.label
+}
+
+@Composable
+private fun TaskReasonRow(task: VitalityMath.GradedTask, config: SysConfig) {
+    val protocolLabel = Protocol.values().firstOrNull { it.name == task.protocolType }?.label ?: task.protocolType
+    val title = listOfNotNull(protocolLabel, taskItemName(config, task)).joinToString(" · ")
+    val whenText = remember(task.firstIssued) {
+        val pattern = if (VitalityMath.isSameDay(task.firstIssued, System.currentTimeMillis())) "'TODAY' HH:mm" else "EEE HH:mm"
+        SimpleDateFormat(pattern, Locale.getDefault()).format(Date(task.firstIssued)).uppercase()
+    }
+
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+            Text(
+                title, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                outcomeLabel(task.outcome), color = outcomeColor(task.outcome),
+                fontSize = 11.sp, fontWeight = FontWeight.Black
+            )
+        }
+        Text("$whenText — ${task.reason}", color = Color.Gray, fontSize = 10.sp, lineHeight = 14.sp)
+    }
+}
+
+@Composable
+fun ComplianceAuditModule(audits: List<NotificationAudit>, config: SysConfig) {
+    var isRevealed by remember { mutableStateOf(false) }
+    var showWhy by remember { mutableStateOf(false) }
+
+    val tasks = remember(audits) { VitalityMath.buildTasks(audits) }
+    val overall = remember(tasks) { VitalityMath.gradeTasks(tasks) }
+    val byProtocol = remember(tasks) {
+        tasks.groupBy { it.protocolType }
+            .mapValues { (_, protoTasks) -> VitalityMath.gradeTasks(protoTasks) }
             .toList()
             .sortedBy { it.first }
     }
 
     // Collapsed-header stats: today's grade plus a rolling 7-day average,
     // so the indicator is meaningful at a glance without expanding it.
-    val todayGrade = remember(audits) {
+    val todayGrade = remember(tasks) {
         val todayStart = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }.timeInMillis
-        VitalityMath.calculateComplianceScore(audits.filter { it.timestampIssued >= todayStart })
+        VitalityMath.gradeTasks(tasks.filter { it.firstIssued >= todayStart })
     }
-    val sevenDayGrade = remember(audits) {
+    val sevenDayGrade = remember(tasks) {
         val sevenDaysAgo = System.currentTimeMillis() - (7L * 86400000L)
-        VitalityMath.calculateComplianceScore(audits.filter { it.timestampIssued >= sevenDaysAgo })
+        VitalityMath.gradeTasks(tasks.filter { it.firstIssued >= sevenDaysAgo })
     }
 
     fun gradeColor(grade: String): Color = when (grade) {
@@ -659,16 +807,16 @@ fun ComplianceAuditModule(audits: List<NotificationAudit>) {
                     Column(horizontalAlignment = Alignment.End) {
                         Text("TODAY", color = Color.Gray, fontSize = 7.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
                         Text(
-                            text = if (todayGrade.totalAlerts > 0) "${todayGrade.grade} ${todayGrade.compliancePercentage}%" else "—",
-                            color = if (todayGrade.totalAlerts > 0) gradeColor(todayGrade.grade) else Color.DarkGray,
+                            text = if (todayGrade.gradedTasks > 0) "${todayGrade.grade} ${todayGrade.compliancePercentage}%" else "—",
+                            color = if (todayGrade.gradedTasks > 0) gradeColor(todayGrade.grade) else Color.DarkGray,
                             fontSize = 11.sp, fontWeight = FontWeight.Black
                         )
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text("7D AVG", color = Color.Gray, fontSize = 7.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
                         Text(
-                            text = if (sevenDayGrade.totalAlerts > 0) "${sevenDayGrade.grade} ${sevenDayGrade.compliancePercentage}%" else "—",
-                            color = if (sevenDayGrade.totalAlerts > 0) gradeColor(sevenDayGrade.grade) else Color.DarkGray,
+                            text = if (sevenDayGrade.gradedTasks > 0) "${sevenDayGrade.grade} ${sevenDayGrade.compliancePercentage}%" else "—",
+                            color = if (sevenDayGrade.gradedTasks > 0) gradeColor(sevenDayGrade.grade) else Color.DarkGray,
                             fontSize = 11.sp, fontWeight = FontWeight.Black
                         )
                     }
@@ -680,7 +828,7 @@ fun ComplianceAuditModule(audits: List<NotificationAudit>) {
             Column(
                 modifier = Modifier.fillMaxWidth().background(Color(0xFF0A0505)).padding(16.dp)
             ) {
-                if (overall.totalAlerts == 0) {
+                if (tasks.isEmpty()) {
                     Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
                         Text("NO ALERT HISTORY YET", color = Color.DarkGray, fontSize = 10.sp)
                     }
@@ -689,9 +837,13 @@ fun ComplianceAuditModule(audits: List<NotificationAudit>) {
                     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                         Text(overall.grade, color = gradeColor(overall.grade), fontSize = 32.sp, fontWeight = FontWeight.Black)
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("${overall.compliancePercentage}% COMPLIANT", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             Text(
-                                "${overall.successCount} OK / ${overall.warningCount} SLOW / ${overall.failureCount} MISSED",
+                                if (overall.gradedTasks > 0) "${overall.compliancePercentage}% COMPLIANT" else "NOTHING GRADED YET",
+                                color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "${overall.onTimeCount} ON TIME / ${overall.slowCount} SLOW / ${overall.missedCount} MISSED" +
+                                    if (overall.openCount > 0) " / ${overall.openCount} OPEN" else "",
                                 color = Color.Gray, fontSize = 10.sp
                             )
                         }
@@ -710,8 +862,34 @@ fun ComplianceAuditModule(audits: List<NotificationAudit>) {
                         ) {
                             Text(label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             Text(
-                                "${grade.grade}  ${grade.compliancePercentage}%  (${grade.totalAlerts})",
+                                if (grade.gradedTasks > 0) "${grade.grade}  ${grade.compliancePercentage}%  (${grade.gradedTasks})"
+                                else "—  (${grade.openCount} open)",
                                 color = gradeColor(grade.grade), fontSize = 11.sp, fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                    SmallActionButton(
+                        if (showWhy) "HIDE WHY" else "SHOW WHY — EACH TASK", NeonPink, Modifier.fillMaxWidth()
+                    ) { showWhy = !showWhy }
+
+                    if (showWhy) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "ON TIME = done within ${VitalityMath.ON_TIME_MINUTES} min of the first alert. " +
+                                "SLOW = done later the same day. MISSED = not done by midnight. " +
+                                "OPEN = not graded yet. Skipped or unanswered alerts are noted, " +
+                                "but only finishing (and when) decides the grade.",
+                            color = Color.Gray, fontSize = 9.sp, lineHeight = 13.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        tasks.take(WHY_LIST_LIMIT).forEach { TaskReasonRow(it, config) }
+                        if (tasks.size > WHY_LIST_LIMIT) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "SHOWING THE LATEST $WHY_LIST_LIMIT OF ${tasks.size}",
+                                color = Color.DarkGray, fontSize = 9.sp, fontWeight = FontWeight.Bold
                             )
                         }
                     }

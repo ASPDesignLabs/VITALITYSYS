@@ -5,6 +5,8 @@ import androidx.room.*
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 // --- ENTITIES ---
 
@@ -39,7 +41,13 @@ data class NotificationAudit(
     val timestampInteracted: Long? = null,
     val timestampFulfilled: Long? = null,
     val interactionType: String? = null, // "CLICKED", "DISMISSED", "IGNORED"
-    val finalStatus: String? = null // "SUCCESS", "CRITICAL_DELAY", "ABANDONED"
+    val finalStatus: String? = null, // "SUCCESS", "CRITICAL_DELAY", "ABANDONED"
+    // Which specific dose/hygiene task this alert was about (see
+    // SysConfig.doseKey / hygieneKey); "" for NUTRIENT/HYDRATION, which have
+    // no sub-items. Lets repeated alerts for the same item be graded as one
+    // task. null only on rows written before v5 — those can't be chained, so
+    // they're graded one alert at a time (see VitalityMath.buildTasks).
+    val itemKey: String? = null
 )
 
 data class ComplianceMetrics(
@@ -55,7 +63,16 @@ data class ComplianceMetrics(
 @Dao
 interface SystemDao {
     @Insert
-    suspend fun insertLog(log: SystemLog)
+    suspend fun insertLog(log: SystemLog): Long
+
+    // A pain event is saved the moment it arrives and its description is
+    // filled in afterwards, so these two let the description screen update
+    // (and de-duplicate) the row it belongs to instead of inserting another.
+    @Query("UPDATE system_logs SET note = :note WHERE id = :id")
+    suspend fun updateLogNote(id: Long, note: String)
+
+    @Query("SELECT id FROM system_logs WHERE type = 'PAIN' AND timestamp = :timestamp AND value = :value LIMIT 1")
+    suspend fun findPainLogId(timestamp: Long, value: Int): Long?
 
     @Query("SELECT * FROM system_logs WHERE timestamp BETWEEN :startTime AND :endTime ORDER BY timestamp ASC")
     fun getLogsInRange(startTime: Long, endTime: Long): Flow<List<SystemLog>>
@@ -88,6 +105,14 @@ interface SystemDao {
     @Query("SELECT * FROM notification_audit WHERE notificationId = :notifId ORDER BY id DESC LIMIT 1")
     suspend fun getAuditByNotificationId(notifId: Int): NotificationAudit?
 
+    // Newest alert row for one specific dose/hygiene task.
+    @Query("SELECT * FROM notification_audit WHERE notificationId = :notifId AND itemKey = :itemKey ORDER BY id DESC LIMIT 1")
+    suspend fun getAuditForItem(notifId: Int, itemKey: String): NotificationAudit?
+
+    // Newest alert row for a protocol that has no sub-items (or a pre-v5 row).
+    @Query("SELECT * FROM notification_audit WHERE notificationId = :notifId AND (itemKey IS NULL OR itemKey = '') ORDER BY id DESC LIMIT 1")
+    suspend fun getAuditWithoutItem(notifId: Int): NotificationAudit?
+
     @Query("""
         SELECT protocolType, 
                COUNT(*) as totalAlerts,
@@ -103,7 +128,40 @@ interface SystemDao {
     fun getRecentAudits(): Flow<List<NotificationAudit>>
 }
 
+// Serializes the find-then-insert in savePainLog. A pain event can be written
+// by more than one handler at nearly the same moment (the message handler,
+// then the screen that opens for it), and without this both could see "no row
+// yet" and insert one each.
+private val painLogLock = Mutex()
+
+// Writes a pain event's level, keyed by the watch's own timestamp: a
+// re-delivered message, or a second handler for the same event, reuses the
+// existing row instead of logging it twice. Returns that row's id.
+suspend fun SystemDao.savePainLog(level: Int, loggedAt: Long): Long = painLogLock.withLock {
+    findPainLogId(loggedAt, level) ?: insertLog(
+        SystemLog(timestamp = loggedAt, type = "PAIN", value = level, note = "No details provided")
+    )
+}
+
+// The alert row that a completion/skip of this protocol (and, for itemized
+// ones, this exact item) belongs to. An itemized completion only ever matches
+// its own item's row — completing one medication must never close out another
+// medication's open alert. Un-itemized completions match the newest keyless
+// row, so e.g. a watch "ALL CLEAR" tap can't close out a real dose alert.
+suspend fun SystemDao.latestAuditFor(protocolId: Int, itemKey: String): NotificationAudit? =
+    if (itemKey.isNotEmpty()) getAuditForItem(protocolId, itemKey) else getAuditWithoutItem(protocolId)
+
 // --- MIGRATIONS ---
+
+// v4 -> v5: notification_audit gains a nullable itemKey so repeated alerts
+// for the same dose/hygiene task can be graded as one task. Purely additive:
+// no rows are touched or rewritten, and existing ones keep a null itemKey,
+// which marks them as pre-v5 (graded one alert at a time).
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE notification_audit ADD COLUMN itemKey TEXT")
+    }
+}
 
 // v3 -> v4: daily_stats swaps its single medsTaken/hygieneDone booleans for
 // a completedKeys column (a set of per-medication-dose / per-hygiene-task
@@ -141,7 +199,7 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
 
 @Database(
     entities = [SystemLog::class, DailyStats::class, NotificationAudit::class],
-    version = 4
+    version = 5
 )
 abstract class VitalityDatabase : RoomDatabase() {
     abstract fun systemDao(): SystemDao
@@ -152,11 +210,11 @@ abstract class VitalityDatabase : RoomDatabase() {
         fun getDatabase(context: Context): VitalityDatabase {
             return INSTANCE ?: synchronized(this) {
                 Room.databaseBuilder(context, VitalityDatabase::class.java, "vitality_blackbox.db")
-                    .addMigrations(MIGRATION_3_4)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
                     // Only pre-migration-tracked versions fall back to a
-                    // destructive reset; v3 -> v4 always goes through the
-                    // real migration above so system_logs/audit history
-                    // survives the upgrade.
+                    // destructive reset; v3 -> v4 -> v5 always go through
+                    // the real migrations above so system_logs/audit
+                    // history survives the upgrade.
                     .fallbackToDestructiveMigrationFrom(1, 2)
                     .build().also { INSTANCE = it }
             }

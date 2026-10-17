@@ -142,78 +142,141 @@ object VitalityMath {
 
         return VitalityPayload(finalHp, hydStatus, mealStatus)
     }
-// --- NEW: AUDIT & COMPLIANCE LOGIC ---
 
-    data class AuditGrade(
-        val totalAlerts: Int,
-        val successCount: Int,
-        val warningCount: Int,
-        val failureCount: Int,
-        val compliancePercentage: Int, // 0 to 100
-        val grade: String // A, B, C, D, F
+    // --- AUDIT & COMPLIANCE LOGIC ---
+    //
+    // Grading is per TASK, not per alert. The watch re-alerts the same
+    // overdue item every ~15 minutes and each alert is its own audit row, so
+    // grading rows would charge one late dose several times over. Rows are
+    // instead chained into tasks (see buildTasks) and each task gets one
+    // outcome:
+    //   ON_TIME - finished within ON_TIME_MINUTES of the first alert  (1.0)
+    //   SLOW    - finished later, but the same day                    (0.5)
+    //   MISSED  - not finished by the end of the day it was raised    (0.0)
+    //   OPEN    - not finished yet and the day isn't over: not graded yet
+    // Skipped or unanswered alerts are noted in the explanation but never
+    // decide the outcome — finishing is what counts. How fast the first tap
+    // came is reported, but doesn't change the grade.
+
+    const val ON_TIME_MINUTES = 60L
+
+    enum class TaskOutcome { ON_TIME, SLOW, MISSED, OPEN }
+
+    data class GradedTask(
+        val protocolType: String,
+        val itemKey: String?, // null = an alert from before item keys existed
+        val firstIssued: Long,
+        val alertCount: Int,
+        val outcome: TaskOutcome,
+        val reason: String // plain-language explanation shown in the app
     )
 
-    enum class AuditCategory {
-        SUCCESS, WARNING, FAILURE, UNKNOWN
-    }
+    data class AuditGrade(
+        val gradedTasks: Int, // ON_TIME + SLOW + MISSED (OPEN isn't graded yet)
+        val onTimeCount: Int,
+        val slowCount: Int,
+        val missedCount: Int,
+        val openCount: Int,
+        val compliancePercentage: Int, // 0 to 100
+        val grade: String // A, B, C, D, F, or N/A when nothing is graded yet
+    )
 
     /**
-     * Evaluates a single notification's lifecycle.
-     * - Success: Interacted < 5 mins AND Fulfilled < 60 mins.
-     * - Warning: Interacted > 5 mins OR Fulfilled > 60 mins.
-     * - Failure: Dismissed (Swiped) OR Ignored (never fulfilled).
+     * Chains alert rows into tasks and grades each one. A task is every alert
+     * for the same protocol + item on the same day, up to and including the
+     * one that got fulfilled; an alert after that starts a new task. Rows
+     * from before item keys existed (itemKey == null) can't be chained, so
+     * each stands alone as its own task.
      */
-    fun evaluateSingleAudit(audit: NotificationAudit): AuditCategory {
-        if (audit.interactionType == "DISMISSED" ||
-            audit.interactionType == "IGNORED" ||
-            audit.finalStatus == "ABANDONED") {
-            return AuditCategory.FAILURE
-        }
+    fun buildTasks(audits: List<NotificationAudit>, now: Long = System.currentTimeMillis()): List<GradedTask> {
+        val chains = mutableListOf<List<NotificationAudit>>()
+        val open = LinkedHashMap<Triple<String, String, Long>, MutableList<NotificationAudit>>()
 
-        val interactTime = audit.timestampInteracted
-        val fulfillTime = audit.timestampFulfilled
-        val issuedTime = audit.timestampIssued
-
-        if (interactTime == null || fulfillTime == null) {
-            return AuditCategory.FAILURE
-        }
-
-        val interactDeltaMins = (interactTime - issuedTime) / 60000L
-        val fulfillDeltaMins = (fulfillTime - issuedTime) / 60000L
-
-        return if (interactDeltaMins <= 5L && fulfillDeltaMins <= 60L) {
-            AuditCategory.SUCCESS
-        } else {
-            AuditCategory.WARNING
-        }
-    }
-
-    /**
-     * Calculates the aggregate compliance score for a specific protocol
-     * or the entire system over a given dataset.
-     */
-    fun calculateComplianceScore(audits: List<NotificationAudit>): AuditGrade {
-        if (audits.isEmpty()) {
-            return AuditGrade(0, 0, 0, 0, 100, "N/A")
-        }
-
-        var successCount = 0
-        var warningCount = 0
-        var failureCount = 0
-
-        audits.forEach { audit ->
-            when (evaluateSingleAudit(audit)) {
-                AuditCategory.SUCCESS -> successCount++
-                AuditCategory.WARNING -> warningCount++
-                AuditCategory.FAILURE -> failureCount++
-                AuditCategory.UNKNOWN -> failureCount++
+        audits.sortedBy { it.timestampIssued }.forEach { audit ->
+            val itemKey = audit.itemKey
+            if (itemKey == null) {
+                chains += listOf(audit)
+                return@forEach
+            }
+            val chainKey = Triple(audit.protocolType, itemKey, dayStart(audit.timestampIssued))
+            val chain = open.getOrPut(chainKey) { mutableListOf() }
+            chain += audit
+            if (audit.timestampFulfilled != null) {
+                chains += chain.toList()
+                open.remove(chainKey)
             }
         }
+        chains += open.values.map { it.toList() }
 
-        // Scoring weight:
-        // Success = 1.0, Warning = 0.5, Failure = 0.0
-        val totalScore = successCount + (warningCount * 0.5f)
-        val complianceFloat = (totalScore / audits.size) * 100f
+        return chains.map { gradeChain(it, now) }.sortedByDescending { it.firstIssued }
+    }
+
+    private fun gradeChain(chain: List<NotificationAudit>, now: Long): GradedTask {
+        val first = chain.first()
+        val firstIssued = first.timestampIssued
+        val dayEnds = nextDayStart(firstIssued)
+        val finishedAt = chain.mapNotNull { it.timestampFulfilled }.minOrNull()
+        val finishedAfterMillis = finishedAt?.let { it - firstIssued }
+
+        val outcome = when {
+            finishedAt != null && finishedAt >= dayEnds -> TaskOutcome.MISSED
+            finishedAfterMillis != null && finishedAfterMillis <= ON_TIME_MINUTES * 60_000L -> TaskOutcome.ON_TIME
+            finishedAfterMillis != null -> TaskOutcome.SLOW
+            now >= dayEnds -> TaskOutcome.MISSED
+            else -> TaskOutcome.OPEN
+        }
+
+        // First real tap = the earliest interaction on a row that wasn't a
+        // skip or a no-reply. (A row that was marked unanswered and then
+        // finished anyway keeps that mark, so it doesn't count as a tap.)
+        val tappedAt = chain
+            .filter { it.interactionType != "DISMISSED" && it.interactionType != "IGNORED" }
+            .mapNotNull { it.timestampInteracted }
+            .minOrNull()
+
+        val headline = when (outcome) {
+            TaskOutcome.ON_TIME -> "Done ${formatMinutes(finishedAfterMillis!! / 60_000L)} after the first alert."
+            TaskOutcome.SLOW ->
+                "Done ${formatMinutes(finishedAfterMillis!! / 60_000L)} after the first alert — past the ${ON_TIME_MINUTES}m mark."
+            TaskOutcome.MISSED ->
+                if (finishedAt != null) "Finished only after the day had ended." else "Not done by the end of the day."
+            TaskOutcome.OPEN -> "Not done yet — the day isn't over."
+        }
+
+        val notes = mutableListOf<String>()
+        if (chain.size > 1) notes += "${chain.size} alerts"
+        val skipped = chain.count { it.interactionType == "DISMISSED" }
+        if (skipped > 0) notes += "skipped ${skipped}x"
+        // The alert that ended up finished obviously got a response, even if
+        // it had been auto-marked unanswered at the 5-minute mark first.
+        val unanswered = chain.count { it.interactionType == "IGNORED" && it.timestampFulfilled == null }
+        if (unanswered > 0) notes += "$unanswered unanswered"
+        if (tappedAt != null && (finishedAt == null || tappedAt < finishedAt)) {
+            notes += "first tap after ${formatMinutes((tappedAt - firstIssued) / 60_000L)}"
+        }
+
+        return GradedTask(
+            protocolType = first.protocolType,
+            itemKey = first.itemKey,
+            firstIssued = firstIssued,
+            alertCount = chain.size,
+            outcome = outcome,
+            reason = if (notes.isEmpty()) headline else "${headline.trimEnd('.')} (${notes.joinToString(", ")})."
+        )
+    }
+
+    /** Aggregate score over already-built tasks. OPEN tasks aren't graded yet. */
+    fun gradeTasks(tasks: List<GradedTask>): AuditGrade {
+        val onTime = tasks.count { it.outcome == TaskOutcome.ON_TIME }
+        val slow = tasks.count { it.outcome == TaskOutcome.SLOW }
+        val missed = tasks.count { it.outcome == TaskOutcome.MISSED }
+        val open = tasks.count { it.outcome == TaskOutcome.OPEN }
+        val graded = onTime + slow + missed
+
+        if (graded == 0) return AuditGrade(0, 0, 0, 0, open, 100, "N/A")
+
+        // On time = 1.0, Slow = 0.5, Missed = 0.0
+        val complianceFloat = ((onTime + slow * 0.5f) / graded) * 100f
         val compliancePercentage = complianceFloat.toInt().coerceIn(0, 100)
 
         val gradeStr = when {
@@ -224,13 +287,30 @@ object VitalityMath {
             else -> "F"
         }
 
-        return AuditGrade(
-            totalAlerts = audits.size,
-            successCount = successCount,
-            warningCount = warningCount,
-            failureCount = failureCount,
-            compliancePercentage = compliancePercentage,
-            grade = gradeStr
-        )
+        return AuditGrade(graded, onTime, slow, missed, open, compliancePercentage, gradeStr)
     }
+
+    /** Convenience: chain, grade, and score a set of alert rows in one go. */
+    fun calculateComplianceScore(audits: List<NotificationAudit>, now: Long = System.currentTimeMillis()): AuditGrade =
+        gradeTasks(buildTasks(audits, now))
+
+    fun isSameDay(a: Long, b: Long): Boolean = dayStart(a) == dayStart(b)
+
+    /** "22m", "1h", "1h 40m". */
+    fun formatMinutes(mins: Long): String = when {
+        mins < 60L -> "${mins}m"
+        mins % 60L == 0L -> "${mins / 60L}h"
+        else -> "${mins / 60L}h ${mins % 60L}m"
+    }
+
+    private fun dayStart(millis: Long): Long = Calendar.getInstance().apply {
+        timeInMillis = millis
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    private fun nextDayStart(millis: Long): Long = Calendar.getInstance().apply {
+        timeInMillis = dayStart(millis)
+        add(Calendar.DAY_OF_YEAR, 1)
+    }.timeInMillis
 }
