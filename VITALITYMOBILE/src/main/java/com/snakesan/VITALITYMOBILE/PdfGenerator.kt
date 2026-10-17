@@ -100,131 +100,146 @@ object PdfGenerator {
         }
 
         // --- PAGE 2: BEHAVIORAL ANALYSIS & TIME SUMMARIES ---
+        // Everything on this page counts TASKS, not alerts. The watch re-alerts
+        // the same overdue item about every 15 minutes and each alert is its
+        // own audit row, so counting rows charged one late dose several times
+        // and disagreed with the in-app grade. VitalityMath.buildTasks chains
+        // those rows back into one task each. Wording is deliberately plain
+        // (on time / late / not done) in both report themes.
         newPage()
-        canvas!!.drawText("BEHAVIORAL TELEMETRY & SLIPPAGE ANALYSIS", 40f, yPos, headerPaint)
-        yPos += 40f
+        canvas!!.drawText("BEHAVIORAL TELEMETRY & TIMELINESS ANALYSIS", 40f, yPos, headerPaint)
+        yPos += 30f
+
+        val now = System.currentTimeMillis()
+        val tasks = VitalityMath.buildTasks(audits, now)
+
+        textPaint.textSize = 8f
+        canvas!!.drawText("A task is one dose, meal, drink or routine; repeated alerts for it count once.", 40f, yPos, textPaint)
+        yPos += 11f
+        canvas!!.drawText("On time = done within ${VitalityMath.ON_TIME_MINUTES} min of the first alert.  Late = done later the same day.", 40f, yPos, textPaint)
+        yPos += 11f
+        canvas!!.drawText("Not done = not done by midnight.  Still-open tasks (day not over) are not counted in the percentages.", 40f, yPos, textPaint)
+        textPaint.textSize = 10f
+        yPos += 30f
 
         // 1. TIME GATED SUMMARIES (Daily, Weekly, Monthly)
         canvas!!.drawText("ACTIVITY AGGREGATES", 40f, yPos, subheadPaint)
         yPos += 20f
-        
-        val now = System.currentTimeMillis()
-        val dayMs = 86400000L
-        val weekAudits = audits.filter { it.timestampIssued > now - (7 * dayMs) }
-        val monthAudits = audits.filter { it.timestampIssued > now - (30 * dayMs) }
-        val dayAudits = audits.filter { it.timestampIssued > now - dayMs }
 
-        fun printSummaryRow(label: String, data: List<NotificationAudit>, y: Float) {
-            val total = data.size
-            val fails = data.count { it.finalStatus == "ABANDONED" || it.interactionType == "DISMISSED" }
-            val failRate = if(total > 0) (fails.toFloat() / total * 100).toInt() else 0
+        val dayMs = 86400000L
+
+        fun printSummaryRow(label: String, windowMs: Long, y: Float) {
+            val windowTasks = tasks.filter { it.firstIssued > now - windowMs }
+            val alertsFired = audits.count { it.timestampIssued > now - windowMs }
+            val g = VitalityMath.gradeTasks(windowTasks)
+            val onTimePct = if (g.gradedTasks > 0) g.onTimeCount * 100 / g.gradedTasks else null
             canvas!!.drawText(label, 40f, y, boldTextPaint)
-            canvas!!.drawText("Alerts: $total", 160f, y, textPaint)
-            canvas!!.drawText("Slippage: $failRate%", 260f, y, if(failRate > 30) redTextPaint else textPaint)
+            canvas!!.drawText("Tasks: ${windowTasks.size}", 125f, y, textPaint)
+            canvas!!.drawText("On time: ${onTimePct?.let { "$it%" } ?: "-"}", 195f, y,
+                if (onTimePct != null && onTimePct < 70) redTextPaint else textPaint)
+            canvas!!.drawText("Late: ${g.slowCount}", 285f, y, textPaint)
+            canvas!!.drawText("Not done: ${g.missedCount}", 340f, y, textPaint)
+            canvas!!.drawText("Alerts fired: $alertsFired", 430f, y, textPaint)
         }
 
-        printSummaryRow("24H SUMMARY", dayAudits, yPos); yPos += 20f
-        printSummaryRow("7D SUMMARY", weekAudits, yPos); yPos += 20f
-        printSummaryRow("30D SUMMARY", monthAudits, yPos); yPos += 40f
+        printSummaryRow("24H SUMMARY", dayMs, yPos); yPos += 20f
+        printSummaryRow("7D SUMMARY", 7 * dayMs, yPos); yPos += 20f
+        printSummaryRow("30D SUMMARY", 30 * dayMs, yPos); yPos += 40f
 
-        // 2. PROTOCOL BREAKDOWN & LATENCY
-        canvas!!.drawText("PROTOCOL SLIPPAGE & AVERAGE LATENCY", 40f, yPos, subheadPaint)
+        // 2. PROTOCOL BREAKDOWN & TIME TO FINISH
+        canvas!!.drawText("PROTOCOL TIMELINESS & AVERAGE TIME TO FINISH", 40f, yPos, subheadPaint)
         yPos += 20f
-        
+
         canvas!!.drawText("CATEGORY", 40f, yPos, boldTextPaint)
-        canvas!!.drawText("AVG DELAY", 160f, yPos, boldTextPaint)
-        canvas!!.drawText("SLIP RATE", 260f, yPos, boldTextPaint)
-        canvas!!.drawText("STATUS", 360f, yPos, boldTextPaint)
+        canvas!!.drawText("TASKS", 150f, yPos, boldTextPaint)
+        canvas!!.drawText("ON TIME", 200f, yPos, boldTextPaint)
+        canvas!!.drawText("AVG TIME TO FINISH", 270f, yPos, boldTextPaint)
+        canvas!!.drawText("NOT DONE", 385f, yPos, boldTextPaint)
+        canvas!!.drawText("GRADE", 460f, yPos, boldTextPaint)
         yPos += 10f
         canvas!!.drawLine(40f, yPos, 555f, yPos, gridPaint)
         yPos += 20f
 
-        val grouped = audits.groupBy { it.protocolType }
-        grouped.forEach { (proto, protoAudits) ->
-            val total = protoAudits.size
-            // Calculate delay for interacted items
-            val interacted = protoAudits.filter { it.timestampInteracted != null }
-            val avgDelayMins = if (interacted.isNotEmpty()) {
-                interacted.map { (it.timestampInteracted!! - it.timestampIssued) / 60000L }.average().toInt()
-            } else 0
-            
-            // Slippage (Ignored + Warnings)
-            val slipped = protoAudits.count { 
-                it.finalStatus == "ABANDONED" || 
-                it.interactionType == "DISMISSED" || 
-                it.interactionType == "IGNORED" 
-            }
-            val slipRate = if(total > 0) (slipped.toFloat() / total * 100).toInt() else 0
+        tasks.groupBy { it.protocolType }.toList().sortedBy { it.first }.forEach { (proto, protoTasks) ->
+            val g = VitalityMath.gradeTasks(protoTasks)
+            val onTimePct = if (g.gradedTasks > 0) g.onTimeCount * 100 / g.gradedTasks else null
+            // Average over tasks that were actually finished in time to count
+            // (on time or late) — a task finished only after midnight isn't an
+            // honest "time to finish".
+            val finishTimes = protoTasks
+                .filter { it.outcome == VitalityMath.TaskOutcome.ON_TIME || it.outcome == VitalityMath.TaskOutcome.SLOW }
+                .mapNotNull { it.finishedAfterMins }
+            val avgFinish = if (finishTimes.isNotEmpty()) VitalityMath.formatMinutes(finishTimes.average().toLong()) else "-"
 
-            canvas!!.drawText(proto, 40f, yPos, textPaint)
-            canvas!!.drawText("${avgDelayMins}m", 160f, yPos, textPaint)
-            canvas!!.drawText("$slipRate%", 260f, yPos, if(slipRate > 25) redTextPaint else textPaint)
-            
-            val status = if (slipRate > 50) "CRITICAL RESISTANCE" else if (slipRate > 25) "DEGRADING" else "STABLE"
-            canvas!!.drawText(status, 360f, yPos, if(slipRate > 25) redTextPaint else boldTextPaint)
-            
+            canvas!!.drawText(protocolDisplayLabel(proto), 40f, yPos, textPaint)
+            canvas!!.drawText("${protoTasks.size}", 150f, yPos, textPaint)
+            canvas!!.drawText(onTimePct?.let { "$it%" } ?: "-", 200f, yPos,
+                if (onTimePct != null && onTimePct < 70) redTextPaint else textPaint)
+            canvas!!.drawText(avgFinish, 270f, yPos, textPaint)
+            canvas!!.drawText("${g.missedCount}", 385f, yPos, textPaint)
+            canvas!!.drawText(g.grade, 460f, yPos, boldTextPaint)
+
             yPos += 20f
         }
         yPos += 20f
 
-        // 3. NOTED RESISTANCE MAPPING
-        canvas!!.drawText("NOTED RESISTANCE MAPPING", 40f, yPos, subheadPaint)
+        // 3. WHEN TASKS RUN LATE OR GO UNDONE
+        canvas!!.drawText("WHEN TASKS RUN LATE OR GO UNDONE", 40f, yPos, subheadPaint)
         yPos += 20f
 
         val cal = Calendar.getInstance()
-        val failuresByHour = audits.filter { it.finalStatus == "ABANDONED" || it.interactionType == "DISMISSED" }
-            .groupBy { cal.timeInMillis = it.timestampIssued; cal.get(Calendar.HOUR_OF_DAY) }
+        val troubleByHour = tasks
+            .filter { it.outcome == VitalityMath.TaskOutcome.SLOW || it.outcome == VitalityMath.TaskOutcome.MISSED }
+            .groupBy { cal.timeInMillis = it.firstIssued; cal.get(Calendar.HOUR_OF_DAY) }
             .mapValues { it.value.size }
             .toList()
             .sortedByDescending { it.second }
 
-        if (failuresByHour.isEmpty()) {
-            canvas!!.drawText("No significant time-based resistance detected.", 40f, yPos, textPaint)
+        if (troubleByHour.isEmpty()) {
+            canvas!!.drawText("No significant time-of-day pattern detected.", 40f, yPos, textPaint)
         } else {
-            val worstHour = failuresByHour.first()
+            val worstHour = troubleByHour.first()
             val timeString = String.format("%02d:00 - %02d:00", worstHour.first, (worstHour.first + 1) % 24)
-            canvas!!.drawText("Highest Notification Abandonment Block: $timeString", 40f, yPos, redTextPaint)
+            canvas!!.drawText("Most late or not-done tasks start in this window: $timeString (${worstHour.second} tasks)", 40f, yPos, redTextPaint)
             yPos += 15f
-            canvas!!.drawText("Recommendation: Adjust routine or mute non-critical alerts during this window.", 40f, yPos, textPaint)
+            canvas!!.drawText("Recommendation: Adjust routine or reminders around this window.", 40f, yPos, textPaint)
         }
         yPos += 50f
 
-        // 4. RESPONSE TIME HISTOGRAM
+        // 4. TIME TO FINISH HISTOGRAM
         checkPage(200f)
-        canvas!!.drawText("RESPONSE LATENCY HISTOGRAM (ALL PROTOCOLS)", 40f, yPos, subheadPaint)
+        canvas!!.drawText("TIME TO FINISH (ALL PROTOCOLS)", 40f, yPos, subheadPaint)
         yPos += 30f
 
-        var countUnder5 = 0; var countUnder15 = 0; var countUnder60 = 0; var countIgnored = 0
-        audits.forEach {
-            if (it.timestampInteracted == null || it.finalStatus == "ABANDONED") { countIgnored++ } 
-            else {
-                val delay = (it.timestampInteracted!! - it.timestampIssued) / 60000L
-                when {
-                    delay <= 5 -> countUnder5++
-                    delay <= 15 -> countUnder15++
-                    else -> countUnder60++
-                }
+        var within15 = 0; var within60 = 0; var over60 = 0; var notDone = 0
+        tasks.forEach {
+            when (it.outcome) {
+                VitalityMath.TaskOutcome.ON_TIME -> if ((it.finishedAfterMins ?: 0L) <= 15L) within15++ else within60++
+                VitalityMath.TaskOutcome.SLOW -> over60++
+                VitalityMath.TaskOutcome.MISSED -> notDone++
+                VitalityMath.TaskOutcome.OPEN -> Unit // not over yet: not counted
             }
         }
+        val stillOpen = tasks.count { it.outcome == VitalityMath.TaskOutcome.OPEN }
 
-        val maxCount = listOf(countUnder5, countUnder15, countUnder60, countIgnored).maxOrNull()?.coerceAtLeast(1) ?: 1
+        val maxCount = listOf(within15, within60, over60, notDone).maxOrNull()?.coerceAtLeast(1) ?: 1
         val histHeight = 100f
         val histWidth = 400f
         val startX = 60f
         val bottomY = yPos + histHeight
-        
+
         // Draw axes
         canvas!!.drawLine(startX, yPos, startX, bottomY, gridPaint)
         canvas!!.drawLine(startX, bottomY, startX + histWidth, bottomY, gridPaint)
 
         // Draw Bars
         val buckets = listOf(
-            Pair("< 5m (Ideal)", countUnder5),
-            Pair("5-15m (Delay)", countUnder15),
-            Pair("15-60m (Late)", countUnder60),
-            Pair("Ignored/Swipe", countIgnored)
+            Pair("0-15m", within15),
+            Pair("15-60m", within60),
+            Pair("Over 60m", over60),
+            Pair("Not done", notDone)
         )
-        
+
         val barWidth = 60f
         val spacing = 30f
         var currentX = startX + 20f
@@ -232,15 +247,21 @@ object PdfGenerator {
         buckets.forEach { (label, count) ->
             val height = (count.toFloat() / maxCount) * histHeight
             val top = bottomY - height
-            
-            // Make "Ignored" bar Red
-            val p = if(label.startsWith("Ignored")) Paint().apply{color=Color.RED} else barPaint
-            
+
+            // Make the "Not done" bar red
+            val p = if (label == "Not done") Paint().apply { color = Color.RED } else barPaint
+
             canvas!!.drawRect(RectF(currentX, top, currentX + barWidth, bottomY), p)
             canvas!!.drawText("$count", currentX + 20f, top - 10f, boldTextPaint)
             canvas!!.drawText(label, currentX, bottomY + 15f, textPaint)
-            
+
             currentX += barWidth + spacing
+        }
+
+        if (stillOpen > 0) {
+            textPaint.textSize = 8f
+            canvas!!.drawText("$stillOpen task(s) are still open (the day isn't over) and are not shown.", startX, bottomY + 32f, textPaint)
+            textPaint.textSize = 10f
         }
 
         yPos = bottomY + 50f

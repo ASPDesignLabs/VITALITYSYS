@@ -126,6 +126,12 @@ interface SystemDao {
 
     @Query("SELECT * FROM notification_audit ORDER BY timestampIssued DESC LIMIT 100")
     fun getRecentAudits(): Flow<List<NotificationAudit>>
+
+    // Everything issued in a window, for the PDF export. The in-app card only
+    // sees the latest 100 rows (getRecentAudits), so a long report built from
+    // that could silently omit older alerts.
+    @Query("SELECT * FROM notification_audit WHERE timestampIssued BETWEEN :startTime AND :endTime ORDER BY timestampIssued ASC")
+    suspend fun getAuditsInRange(startTime: Long, endTime: Long): List<NotificationAudit>
 }
 
 // Serializes the find-then-insert in savePainLog. A pain event can be written

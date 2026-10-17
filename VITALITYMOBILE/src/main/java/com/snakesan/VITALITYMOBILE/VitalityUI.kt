@@ -509,7 +509,7 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
 
         Spacer(Modifier.height(12.dp))
 
-        DiagnosticModule(logs, audits, activity)
+        DiagnosticModule(logs, activity)
 
         Spacer(Modifier.height(12.dp))
 
@@ -927,7 +927,7 @@ fun ComplianceAuditModule(audits: List<NotificationAudit>, config: SysConfig) {
 }
 
 @Composable
-fun DiagnosticModule(allLogs: List<SystemLog>, allAudits: List<NotificationAudit>, activity: MainActivity) {
+fun DiagnosticModule(allLogs: List<SystemLog>, activity: MainActivity) {
     var isRevealed by remember { mutableStateOf(false) }
     var weekOffset by remember { mutableIntStateOf(0) }
     var isClinicalExport by remember { mutableStateOf(false) }
@@ -1049,20 +1049,28 @@ fun DiagnosticModule(allLogs: List<SystemLog>, allAudits: List<NotificationAudit
                         it.type == "PAIN" && it.timestamp >= activity.rangeStart && it.timestamp <= activity.rangeEnd
                     }.sortedBy { it.timestamp }
 
-                    val exportAudits = allAudits.filter {
-                        it.timestampIssued >= activity.rangeStart && it.timestampIssued <= activity.rangeEnd
-                    }
-
-                    val pdfUri = PdfGenerator.generateReport(context, exportLogs, exportAudits, isClinicalExport)
-
-                    if (pdfUri != null) {
-                        val sendIntent = Intent().apply {
-                            action = Intent.ACTION_SEND
-                            putExtra(Intent.EXTRA_STREAM, pdfUri)
-                            type = "application/pdf"
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    val rangeStart = activity.rangeStart
+                    val rangeEnd = activity.rangeEnd
+                    val clinical = isClinicalExport
+                    activity.lifecycleScope.launch {
+                        // Load everything in the chosen range (the in-app card
+                        // only sees the latest 100 rows, so building the report
+                        // from that could silently omit older alerts), and
+                        // build the document off the main thread.
+                        val pdfUri = withContext(Dispatchers.IO) {
+                            val exportAudits = activity.db.systemDao().getAuditsInRange(rangeStart, rangeEnd)
+                            PdfGenerator.generateReport(context, exportLogs, exportAudits, clinical)
                         }
-                        context.startActivity(Intent.createChooser(sendIntent, "Share Vitality Report"))
+
+                        if (pdfUri != null) {
+                            val sendIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_STREAM, pdfUri)
+                                type = "application/pdf"
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, "Share Vitality Report"))
+                        }
                     }
                 }
             }
