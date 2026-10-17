@@ -162,6 +162,29 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         return (c.get(Calendar.YEAR) * 1000) + c.get(Calendar.DAY_OF_YEAR)
     }
 
+    // The day the in-memory counts and completed keys belong to. The phone has
+    // no daily reset of its own: it used to depend on the watch's push to zero
+    // things at midnight, and until that arrived persistState would write
+    // yesterday's counts into today's row. See rollOverDayIfNeeded.
+    private var loadedDayId = 0
+
+    // Starts a new day's counts from zero once midnight has passed. In memory
+    // only (no database read): while the app is open, the only writers of
+    // today's row are this Activity and a notification quick-reply, and the
+    // row is empty at the instant of rollover. Overcharge is deliberately left
+    // alone — it follows HP, and a new day's counts pull HP down by themselves.
+    // Runs on the 5-second tick and before a watch push is merged, since the
+    // tick doesn't run while the app is stopped.
+    private fun rollOverDayIfNeeded() {
+        val today = getTodayId()
+        if (today == loadedDayId) return
+        loadedDayId = today
+        nutrientCount = 0
+        hydrationCount = 0
+        completedKeys = emptySet()
+        calculateHealth(Calendar.getInstance())
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -194,9 +217,11 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         db = VitalityDatabase.getDatabase(this)
 
         // --- LOAD STATE FROM DB ---
+        loadedDayId = getTodayId()
+        val loadDayId = loadedDayId
         lifecycleScope.launch {
             val stats = withContext(Dispatchers.IO) {
-                db.systemDao().getDailyStats(getTodayId())
+                db.systemDao().getDailyStats(loadDayId)
             }
             if (stats != null) {
                 nutrientCount = stats.nutrientCount
@@ -238,6 +263,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             // repeatOnLifecycle suspends when the app is minimized and resumes when opened
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (isActive) {
+                    rollOverDayIfNeeded()
                     calculateHealth(Calendar.getInstance())
                     // 5-second tick for incredibly responsive UI without draining background battery
                     delay(5000)
@@ -300,7 +326,10 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     }
 
     fun persistState() {
-        val dayId = getTodayId()
+        // The day the counts were loaded for, not the wall clock's: in the gap
+        // between midnight and rollover the in-memory counts are still
+        // yesterday's, and they must not be written into today's row.
+        val dayId = loadedDayId
         val stats = DailyStats(
             dayId = dayId,
             nutrientCount = nutrientCount,
@@ -400,10 +429,32 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             if (event.type == DataEvent.TYPE_CHANGED) {
                 if (event.dataItem.uri.path == "/vitality_state") {
                     val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
+                    // Read before the buffer is released. A missing field
+                    // counts as "nothing new" (0 / no keys), which a merge ignores.
+                    val watchDayId = if (dataMap.containsKey("dayId")) dataMap.getInt("dayId") else null
+                    val incoming = DayCounts(
+                        nutrients = dataMap.getInt("nutrients", 0),
+                        hydration = dataMap.getInt("hydration", 0),
+                        keys = decodeKeySet(dataMap.getString("completedKeys") ?: "")
+                    )
                     runOnUiThread {
-                        nutrientCount = dataMap.getInt("nutrients", nutrientCount)
-                        hydrationCount = dataMap.getInt("hydration", hydrationCount)
-                        completedKeys = decodeKeySet(dataMap.getString("completedKeys") ?: "")
+                        // The first push after midnight can arrive before the
+                        // 5-second tick (or while the app is stopped, when
+                        // there is no tick): roll over first, so it is judged
+                        // against — and merged into — today.
+                        rollOverDayIfNeeded()
+                        // A push stamped with another day is stale, and a merge
+                        // can only raise numbers, so merging it would stick
+                        // for the whole day (see WatchMessages.mergeWatchState).
+                        if (watchDayId != null && watchDayId != loadedDayId) return@runOnUiThread
+
+                        // Merge, don't overwrite: the phone can have completions
+                        // the watch hasn't seen, and the watch's push can be
+                        // older than them.
+                        val merged = DayCounts(nutrientCount, hydrationCount, completedKeys).mergedWith(incoming)
+                        nutrientCount = merged.nutrients
+                        hydrationCount = merged.hydration
+                        completedKeys = merged.keys
 
                         calculateHealth(Calendar.getInstance())
                         persistState()

@@ -16,6 +16,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
+// One day's counts and completed dose/task keys. The single rule for folding
+// the watch's numbers into the phone's lives here, so the background path
+// (mergeWatchState) and the live handler in MainActivity can't drift apart:
+// within a day counts only go up and keys are only added, so the larger count
+// and the union of keys keeps both sides' completions.
+data class DayCounts(val nutrients: Int, val hydration: Int, val keys: Set<String>) {
+    fun mergedWith(other: DayCounts) = DayCounts(
+        nutrients = maxOf(nutrients, other.nutrients),
+        hydration = maxOf(hydration, other.hydration),
+        keys = keys + other.keys
+    )
+}
+
 // What the phone does with messages from the watch when MainActivity ISN'T
 // running. While it is, MainActivity's own live listeners handle these
 // (see MainActivity.onMessageReceived / onDataChanged) and
@@ -160,22 +173,21 @@ object WatchMessages {
         watchDayId: Int? = null
     ): DailyStats? {
         if (watchDayId != null && watchDayId != dayId) return null
-        val mergedNutrients = maxOf(existing?.nutrientCount ?: 0, nutrients)
-        val mergedHydration = maxOf(existing?.hydrationCount ?: 0, hydration)
-        val existingKeys = existing?.let { decodeKeySet(it.completedKeys) } ?: emptySet()
-        val mergedKeys = existingKeys + decodeKeySet(completedKeys)
 
-        if (existing != null &&
-            existing.nutrientCount == mergedNutrients &&
-            existing.hydrationCount == mergedHydration &&
-            existingKeys == mergedKeys
-        ) return null
+        val current = DayCounts(
+            nutrients = existing?.nutrientCount ?: 0,
+            hydration = existing?.hydrationCount ?: 0,
+            keys = existing?.let { decodeKeySet(it.completedKeys) } ?: emptySet()
+        )
+        val merged = current.mergedWith(DayCounts(nutrients, hydration, decodeKeySet(completedKeys)))
+
+        if (existing != null && merged == current) return null
 
         return DailyStats(
             dayId = dayId,
-            nutrientCount = mergedNutrients,
-            hydrationCount = mergedHydration,
-            completedKeys = encodeKeySet(mergedKeys),
+            nutrientCount = merged.nutrients,
+            hydrationCount = merged.hydration,
+            completedKeys = encodeKeySet(merged.keys),
             lastUpdated = now
         )
     }
