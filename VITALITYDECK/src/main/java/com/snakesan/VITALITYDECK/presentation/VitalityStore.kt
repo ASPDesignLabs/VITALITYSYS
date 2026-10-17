@@ -8,7 +8,9 @@ import java.util.Calendar
 class VitalityStore(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("vitality_db", Context.MODE_PRIVATE)
 
-    fun checkDailyReset() {
+    // Returns true if it rolled the stored counts over to a new day, so a
+    // caller holding its own in-memory copy knows to reload it.
+    fun checkDailyReset(): Boolean {
         // year*1000 + dayOfYear (matches the phone's getTodayId()) — plain
         // DAY_OF_YEAR alone would wrongly skip a reset if the watch went
         // untouched for close to exactly 365/366 days.
@@ -22,8 +24,15 @@ class VitalityStore(context: Context) {
                 .putInt("count_hydration", 0)
                 .putString("completed_keys", "")
                 .apply()
+            return true
         }
+        return false
     }
+
+    // The day (same year*1000 + dayOfYear id) the stored counts belong to.
+    // Stamped on every state push so the phone can tell — and ignore — a
+    // push that is still carrying a previous day's numbers.
+    fun dayId(): Int = prefs.getInt("day_id", -1)
 
     var nutrientCount: Int
         get() = prefs.getInt("count_nutrient", 0)

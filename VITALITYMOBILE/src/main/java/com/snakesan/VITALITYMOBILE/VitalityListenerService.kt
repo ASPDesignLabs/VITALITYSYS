@@ -74,7 +74,8 @@ class VitalityListenerService : WearableListenerService() {
                         this,
                         nutrients = map.getInt("nutrients"),
                         hydration = map.getInt("hydration"),
-                        completedKeys = map.getString("completedKeys") ?: ""
+                        completedKeys = map.getString("completedKeys") ?: "",
+                        watchDayId = if (map.containsKey("dayId")) map.getInt("dayId") else null
                     )
                 }
             }

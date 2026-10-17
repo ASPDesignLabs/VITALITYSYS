@@ -117,14 +117,17 @@ object WatchMessages {
     // dose/task keys (MainActivity.onDataChanged applies it live). Without the
     // app running, nothing wrote it to the database, so the phone — and
     // HeartbeatWorker's HP maths — kept using stale numbers.
-    fun applyStateWhenClosed(context: Context, nutrients: Int, hydration: Int, completedKeys: String) {
+    fun applyStateWhenClosed(
+        context: Context, nutrients: Int, hydration: Int, completedKeys: String, watchDayId: Int?
+    ) {
         if (MainActivity.isRunning()) return
         val app = context.applicationContext
         CoroutineScope(Dispatchers.IO).launch {
             val dao = VitalityDatabase.getDatabase(app).systemDao()
             val dayId = todayId()
             val merged = mergeWatchState(
-                dao.getDailyStats(dayId), dayId, nutrients, hydration, completedKeys, System.currentTimeMillis()
+                dao.getDailyStats(dayId), dayId, nutrients, hydration, completedKeys,
+                System.currentTimeMillis(), watchDayId
             ) ?: return@launch
             dao.setDailyStats(merged)
         }
@@ -140,14 +143,23 @@ object WatchMessages {
     // larger count and the union of keys keeps both sides' completions, and is
     // safe to repeat. Returns null when nothing would change, because the
     // watch re-pushes every minute while its app is on screen.
+    //
+    // watchDayId is the day the watch stamped on its push. Merging can only
+    // ever raise a number, so a push still carrying YESTERDAY's counts (the
+    // watch used to reset only on open and in a 15-minute worker, so an app
+    // left on screen across midnight kept pushing them) would stick for the
+    // whole day if it were merged — it is ignored instead. null = an older
+    // watch build that doesn't stamp its pushes: merged as before.
     internal fun mergeWatchState(
         existing: DailyStats?,
         dayId: Int,
         nutrients: Int,
         hydration: Int,
         completedKeys: String,
-        now: Long
+        now: Long,
+        watchDayId: Int? = null
     ): DailyStats? {
+        if (watchDayId != null && watchDayId != dayId) return null
         val mergedNutrients = maxOf(existing?.nutrientCount ?: 0, nutrients)
         val mergedHydration = maxOf(existing?.hydrationCount ?: 0, hydration)
         val existingKeys = existing?.let { decodeKeySet(it.completedKeys) } ?: emptySet()
