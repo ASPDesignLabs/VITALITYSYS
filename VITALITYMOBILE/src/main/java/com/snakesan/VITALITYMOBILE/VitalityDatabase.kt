@@ -5,6 +5,8 @@ import androidx.room.*
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 // --- ENTITIES ---
 
@@ -124,6 +126,21 @@ interface SystemDao {
 
     @Query("SELECT * FROM notification_audit ORDER BY timestampIssued DESC LIMIT 100")
     fun getRecentAudits(): Flow<List<NotificationAudit>>
+}
+
+// Serializes the find-then-insert in savePainLog. A pain event can be written
+// by more than one handler at nearly the same moment (the message handler,
+// then the screen that opens for it), and without this both could see "no row
+// yet" and insert one each.
+private val painLogLock = Mutex()
+
+// Writes a pain event's level, keyed by the watch's own timestamp: a
+// re-delivered message, or a second handler for the same event, reuses the
+// existing row instead of logging it twice. Returns that row's id.
+suspend fun SystemDao.savePainLog(level: Int, loggedAt: Long): Long = painLogLock.withLock {
+    findPainLogId(loggedAt, level) ?: insertLog(
+        SystemLog(timestamp = loggedAt, type = "PAIN", value = level, note = "No details provided")
+    )
 }
 
 // The alert row that a completion/skip of this protocol (and, for itemized

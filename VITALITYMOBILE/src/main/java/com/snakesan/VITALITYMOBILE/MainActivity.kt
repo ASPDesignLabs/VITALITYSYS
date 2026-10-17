@@ -27,9 +27,9 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.google.android.gms.wearable.*
 import com.snakesan.vitalitysys.data.DailyStats
-import com.snakesan.vitalitysys.data.SystemLog
 import com.snakesan.vitalitysys.data.VitalityDatabase
 import com.snakesan.vitalitysys.data.latestAuditFor
+import com.snakesan.vitalitysys.data.savePainLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -192,7 +192,6 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         overchargeStartTime = prefs.getLong("overcharge_start", 0L)
 
         db = VitalityDatabase.getDatabase(this)
-        activeInstance = this
 
         // --- LOAD STATE FROM DB ---
         lifecycleScope.launch {
@@ -219,6 +218,10 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
 
         Wearable.getMessageClient(this).addListener(this)
         Wearable.getDataClient(this).addListener(this)
+        // Only now does the app count as "running" to the background fallback
+        // (see WatchMessages): set any earlier and a watch message landing in
+        // the gap would be skipped by the service yet not heard by us either.
+        activeInstance = this
         handleIntent(intent)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -425,6 +428,9 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
                 userContextPhotoUri = null
                 activeProtocol = Protocol.CHEMISTRY
                 savePainEvent(level, loggedAt)
+                // The screen is up now, so the "tap to add details" prompt
+                // (see WatchMessages.recordPain) has done its job.
+                WatchMessages.cancelPainNotification(this)
             } else if (protoId != -1) {
                 val protocol = Protocol.values().find { it.id == protoId }
                 activeProtocol = protocol
@@ -448,6 +454,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
                         userContext = ""
                         userContextPhotoUri = null
                         appMode = AppMode.NUTRITION_CAPTURE
+                        WatchMessages.cancelMealNotification(this)
                         // A watch-triggered meal log isn't "responding to an
                         // interruption" — there's no captured context to nag
                         // about, just macro detail left to fill in.
@@ -467,23 +474,28 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
 
     override fun onDestroy() {
         super.onDestroy()
+        // Clear "running" first, then stop listening: in the gap, the service
+        // fallback and our listener may both see a message (harmless — every
+        // handler here is idempotent) rather than neither (a lost message).
+        if (activeInstance === this) activeInstance = null
         Wearable.getMessageClient(this).removeListener(this)
         Wearable.getDataClient(this).removeListener(this)
-        if (activeInstance === this) activeInstance = null
     }
 
     override fun onMessageReceived(event: MessageEvent) {
         if (event.path == "/sys/pain_log") {
-            val buffer = ByteBuffer.wrap(event.data)
-            val painLevel = buffer.int
-            // The watch stamps each log when it's tapped, which can be well
-            // before delivery if it sat in the retry queue while disconnected.
-            val loggedAt = if (buffer.remaining() >= 8) buffer.long else System.currentTimeMillis()
+            val pain = PainLogEvent.fromBytes(event.data)
+            // Save the level (and leave a "tap to add details" notification)
+            // BEFORE trying to open the screen: Android can refuse to launch
+            // an Activity while the app is in the background, and the entry
+            // must not depend on that launch succeeding. The screen, if it
+            // does open, reuses this same row and clears the notification.
+            WatchMessages.recordPain(this, pain)
             val intent = Intent(this, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 putExtra("PROTOCOL_ID", 99)
-                putExtra("PAIN_LEVEL", painLevel)
-                putExtra("PAIN_TS", loggedAt)
+                putExtra("PAIN_LEVEL", pain.level)
+                putExtra("PAIN_TS", pain.loggedAt)
             }
             startActivity(intent)
         }
@@ -503,6 +515,8 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
                 // trail, then force the phone open so the user can enter the
                 // macro detail only the phone UI supports.
                 markCompletedExternally(this, Protocol.NUTRIENT, "", "WATCH_LOGGED")
+                // Same "the launch below may be refused" safety net as pain.
+                WatchMessages.notifyMealLogged(this)
                 val intent = Intent(this, MainActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                     putExtra("PROTOCOL_ID", Protocol.NUTRIENT.id)
@@ -632,6 +646,12 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         // running Activity. Cleared in onDestroy.
         @Volatile private var activeInstance: MainActivity? = null
 
+        // True while a MainActivity exists and is listening for watch messages
+        // itself. VitalityListenerService / WatchMessages use this to decide
+        // whether a watch message is theirs to handle (app closed) or the live
+        // Activity's (app running), so each message is handled once.
+        fun isRunning(): Boolean = activeInstance != null
+
         fun isActivelyRespondingTo(protocolId: Int): Boolean {
             val instance = activeInstance ?: return false
             // Same carve-out as reconcileInFlightOverlay: a pain capture
@@ -695,18 +715,16 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
 
     // Now these functions are safely back in the main class:
 
-    // Writes the pain level the moment the event arrives, with a placeholder
-    // note, so nothing the user does on the description screen (including
-    // leaving it) can lose the entry. Keyed by the watch's own timestamp so
-    // a re-delivered event or a re-created Activity reuses the same row
-    // instead of logging it twice. Runs outside lifecycleScope on purpose:
-    // the write must still finish if the Activity goes away right after.
+    // Makes sure the pain level is saved (with a placeholder note) and keeps
+    // the row's id for the description screen to fill in. Usually the message
+    // handler has already written it (see WatchMessages.recordPain); savePainLog
+    // is keyed on the watch's own timestamp, so this reuses that row — and a
+    // re-delivered event or re-created Activity does too — instead of logging
+    // it twice. Runs outside lifecycleScope on purpose: the write must still
+    // finish if the Activity goes away right after.
     private fun savePainEvent(level: Int, loggedAt: Long) {
         pendingPainLogId = CoroutineScope(Dispatchers.IO).async {
-            val dao = db.systemDao()
-            dao.findPainLogId(loggedAt, level) ?: dao.insertLog(
-                SystemLog(timestamp = loggedAt, type = "PAIN", value = level, note = "No details provided")
-            )
+            db.systemDao().savePainLog(level, loggedAt)
         }
     }
 
@@ -724,6 +742,9 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
 
     // Ends the pain screen without touching any audit or notification state.
     fun closePainEvent() {
+        // Belt and braces: the prompt can be posted a moment after the screen
+        // opened (the save runs on another thread), so clear it here too.
+        WatchMessages.cancelPainNotification(this)
         pendingPainLevel = 0
         painEventActive = false
         pendingPainLogId = null

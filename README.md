@@ -94,7 +94,11 @@ Three pieces make this robust rather than just a nice screen flow:
   a watch tap while the phone is mid-capture fast-forwards the phone screen
   instead of leaving a stale "confirm" button up, and a watch action taken
   while briefly disconnected is queued and retried rather than silently
-  dropped.
+  dropped. This works with the phone app closed too: a pain log is saved
+  immediately (with a quiet "tap to add details" notification), a finished
+  task closes its audit row and clears its reminders, and the watch's counts
+  are merged into the phone's — never overwriting something the phone did
+  itself, like a notification quick-reply.
 
 ## Pain / symptom logging
 

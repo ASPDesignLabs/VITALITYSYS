@@ -58,6 +58,22 @@ data class TelemetryEvent(val protocolId: Int, val timestamp: Long, val itemKey:
     }
 }
 
+// A pain level logged on the watch (/sys/pain_log): the level, then the
+// watch's own tap time, which can be well before delivery if the log sat in
+// the watch's retry queue while disconnected. Shared by the live handler in
+// MainActivity and the background fallback in VitalityListenerService so the
+// two can't drift apart.
+data class PainLogEvent(val level: Int, val loggedAt: Long) {
+    companion object {
+        fun fromBytes(bytes: ByteArray): PainLogEvent {
+            val buffer = ByteBuffer.wrap(bytes)
+            val level = buffer.int
+            val loggedAt = if (buffer.remaining() >= 8) buffer.long else System.currentTimeMillis()
+            return PainLogEvent(level, loggedAt)
+        }
+    }
+}
+
 // AlertPayload carries which specific dose/hygiene-task key (see
 // SysConfig.doseKey / hygieneKey) an alert is about, plus a human-readable
 // message, so a watch-triggered phone alert/notification can name the
