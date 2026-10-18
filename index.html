@@ -1118,8 +1118,9 @@
             call. The <strong>FOCUS</strong> setting above dials it from
             <strong>EASY</strong> (back exits immediately) through
             <strong>STANDARD</strong> (back asks you to confirm skipping
-            first) to <strong>FIRM</strong> (back does nothing — finish it
-            or explicitly abandon it). It's a dial, not a fixed behavior:
+            first) to <strong>FIRM</strong> (back does nothing and says so —
+            finish it, or press and hold SKIP for three seconds to leave).
+            It's a dial, not a fixed behavior:
             steering your own follow-through is the point, not the app
             deciding for you.
           </p>
@@ -1174,6 +1175,13 @@
             window — which can itself be overridden when round-the-clock
             monitoring is actually wanted.
           </p>
+          <p>
+            The phone has its own pain screen too — a row of 0–10 buttons and
+            an optional description, saved only when you say so — and tells
+            the watch, which keeps the follow-up schedule in one place. The
+            check-in itself is its own item, graded separately from your
+            medication.
+          </p>
         </div>
       </div>
     </div>
@@ -1195,17 +1203,20 @@
         <div id="diagPanel" class="reveal-panel brief-panel" hidden>
           <p>
             Every alert the system fires is tracked end to end — issued,
-            interacted with, fulfilled — and graded success / warning /
-            failure, rolled up into a per-protocol A–F compliance score.
+            interacted with, fulfilled. Repeated alerts for the same dose or
+            task count once, and each is graded on time, slow or missed —
+            finishing late still counts, just as slow — then rolled up into
+            a per-protocol A–F compliance score, with a plain-language
+            reason for every grade.
           </p>
           <p>
             From the phone you can generate a multi-page PDF report, in
             either the app's own dark "system" theme or a plain light
             "clinical" theme meant for sharing with a doctor or care team. It
             covers the raw event log, 24-hour/7-day/30-day summaries,
-            per-protocol response latency, which hour of the day tends to see
-            the most abandoned alerts, and a response-time histogram — handed
-            off through the normal Android share sheet.
+            per-protocol time to finish, which hour of the day tends to see
+            the most late or undone tasks, and a time-to-finish histogram —
+            handed off through the normal Android share sheet.
           </p>
           <div class="export-demo">
             <div class="export-row">

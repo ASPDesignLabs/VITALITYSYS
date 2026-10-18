@@ -102,29 +102,41 @@ rather than just clearing a reminder.
 
 ## Pain / symptom logging
 
-A separate flow (deck index 4 on the watch, protocol id 99 on the phone):
+A separate flow (deck index 4 on the watch; on the phone, a **LOG PAIN**
+button and a 0–10 picker screen, `PainPicker.kt`; protocol id 99 on both):
 log a 0–10 pain level with a text description of "location / type /
 triggers." Logging above level 3 automatically schedules a **60-minute
 follow-up check-in** ("STATUS CHECK: Update Pain Levels") unless it's
 inside the user's configured sleep window (`activeStartHour`/
 `activeEndHour`), and that sleep-window suppression itself can be
 overridden with a "clinical override" setting for cases where round-the-
-clock monitoring is wanted.
-*(`VITALITYDECK/.../MainActivity.kt` `logPain`/`schedulePainCheck`,
-`SentinelWorker.kt`)*
+clock monitoring is wanted. The watch owns that schedule (`PainFollowUp`);
+pain logged on the phone is sent to it as a persistent data item
+(`/vitality_pain_from_phone`) handled by the watch's background
+`VitalityDataService`. The check-in is sent under the pain id (not as a
+CHEMISTRY alert), audited as its own `PAIN_CHECK` item shown as "PAIN
+CHECK-IN," and closes when pain is logged on either device.
+*(`VITALITYDECK/.../MainActivity.kt` `logPain`, `PainFollowUp.kt`,
+`SentinelWorker.kt`; `VITALITYMOBILE/.../VitalityListenerService.kt`,
+`WatchMessages.kt`)*
 
 ## Notification compliance auditing + PDF export
 
 Every alert fired is written to a `notification_audit` row (issued →
 interacted → fulfilled timestamps, interaction type: clicked/dismissed/
-ignored). `VitalityMath` grades each one Success / Warning / Failure and
-rolls them into a per-protocol A–F compliance score. The phone can
-generate a **multi-page PDF** ("Behavioral Audit" or, in a separate
-"clinical" light-mode theme, a "Vitality Clinical Report") covering:
-raw pain/event log, 24h/7d/30d alert-volume and slippage-rate summaries,
-per-protocol average response latency, a "worst hour of the day for
-abandoned alerts" callout, and a response-latency histogram — then hands
-it to the OS share sheet.
+ignored, and which dose/task it was about). `VitalityMath` chains repeated
+alerts for the same item into one **task** and grades each ON TIME
+(finished within 60 min of the first alert), SLOW (later, same day), MISSED
+(not done by midnight) or OPEN (day not over), rolled into a per-protocol
+A–F compliance score; skips and unanswered alerts are noted but never
+decide the outcome. The phone can generate a **multi-page PDF** ("Behavioral
+Audit" or, in a separate "clinical" light-mode theme, a "Vitality Clinical
+Report"), counted the same way in plain wording (on time / late / not done)
+over the chosen date range: raw pain/event log, 24h/7d/30d summaries with
+the raw alert count alongside, a per-protocol table (tasks, % on time,
+average time to finish, grade), the hour of day with the most late or
+not-done tasks, and a time-to-finish histogram — then hands it to the OS
+share sheet.
 *(`VITALITYMOBILE/.../VitalityMath.kt` audit section, `PdfGenerator.kt`,
 `data/VitalityDatabase.kt` `NotificationAudit` entity)*
 
