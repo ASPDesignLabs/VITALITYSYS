@@ -49,8 +49,8 @@ class SentinelWorker(val context: Context, workerParams: WorkerParameters) : Cor
                 return Result.success()
             }
 
-            // Trigger Notification
-            triggerAlert(Protocol.CHEMISTRY, "", "STATUS CHECK: Update Pain Levels.")
+            // Trigger Notification — under its own id, not CHEMISTRY's (see PAIN_PROTOCOL_ID)
+            triggerAlert(PAIN_PROTOCOL_ID, "", "STATUS CHECK: Update Pain Levels.")
             return Result.success()
         }
 
@@ -145,7 +145,10 @@ class SentinelWorker(val context: Context, workerParams: WorkerParameters) : Cor
         }
     }
 
-    private fun triggerAlert(protocol: Protocol, itemKey: String, message: String) {
+    private fun triggerAlert(protocol: Protocol, itemKey: String, message: String) =
+        triggerAlert(protocol.id, itemKey, message)
+
+    private fun triggerAlert(protocolId: Int, itemKey: String, message: String) {
         val channelId = "vitality_ai"
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -166,9 +169,9 @@ class SentinelWorker(val context: Context, workerParams: WorkerParameters) : Cor
             .setAutoCancel(true)
             .build()
 
-        nm.notify(protocol.id, notification)
+        nm.notify(protocolId, notification)
 
-        val payload = AlertPayload(protocol.id, itemKey, message)
+        val payload = AlertPayload(protocolId, itemKey, message)
 
         try {
             val nodes = Tasks.await(Wearable.getNodeClient(context).connectedNodes)

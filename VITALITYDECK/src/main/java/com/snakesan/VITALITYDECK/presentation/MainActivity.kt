@@ -135,6 +135,16 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         config = store.getConfig()
     }
 
+    // Rolls the watch's counts over to a new day if midnight has passed, and
+    // reloads the in-memory copy to match. Called before anything is applied,
+    // shown or pushed (logEvent, broadcastToOverseerLocal): the reset used to
+    // run only on open and in the 15-minute worker, so an app left open
+    // across midnight kept showing and pushing yesterday's counts, and a
+    // reset that ran *after* a tap would have wiped it.
+    private fun rollOverDayIfNeeded() {
+        if (store.checkDailyReset()) loadState()
+    }
+
     override fun onResume() {
         super.onResume()
         store.checkDailyReset()
@@ -150,6 +160,9 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             dataMap.putInt("nutrients", store.nutrientCount)
             dataMap.putInt("hydration", store.hydrationCount)
             dataMap.putString("completedKeys", encodeKeySet(store.completedKeys))
+            // Which day these numbers belong to, so the phone can ignore a
+            // push that still carries a previous day's counts.
+            dataMap.putInt("dayId", store.dayId())
             dataMap.putLong("timestamp", System.currentTimeMillis()) // Force sync
         }.asPutDataRequest()
 
@@ -192,6 +205,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     // internal (not private) so debug/DebugTools.kt's extension functions
     // can force a rebroadcast after a debug-only state change.
     internal fun broadcastToOverseerLocal() {
+        rollOverDayIfNeeded()
         val payload = VitalityMath.calculateSystemStatus(
             nutrientCount = nutrientCount, hydrationCount = hydrationCount,
             completedKeys = completedKeys, config = config
@@ -273,6 +287,9 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
 
     fun logEvent(protocol: Protocol, itemKey: String = "") {
         vibrateAck(this, heavy = true)
+        // Before applying the tap, never after: a rollover that ran after it
+        // would reset the count it just bumped.
+        rollOverDayIfNeeded()
         val now = System.currentTimeMillis()
 
         // CLEAR DEBUG DAMAGE ON HEAL
@@ -332,22 +349,12 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         vibrateAck(this, heavy = true)
         val now = System.currentTimeMillis()
         store.addPendingPainLog(now, level)
-        store.lastPainLevel = level
+        // Schedules or cancels the 60-minute follow-up and clears a pending
+        // check-in notification — the same rule pain logged on the phone goes
+        // through (see PainFollowUp).
+        PainFollowUp.apply(this, level)
         flushPainLogs()
-        if (level > 3) {
-            schedulePainCheck()
-        } else {
-            WorkManager.getInstance(this).cancelUniqueWork("PainCheck")
-        }
         activeDeckIndex = 0
-    }
-    
-    private fun schedulePainCheck() {
-        val painCheck = OneTimeWorkRequestBuilder<SentinelWorker>()
-            .setInitialDelay(60, TimeUnit.MINUTES)
-            .setInputData(Data.Builder().putBoolean("CHECK_PAIN", true).build())
-            .build()
-        WorkManager.getInstance(this).enqueueUniqueWork("PainCheck", ExistingWorkPolicy.REPLACE, painCheck)
     }
 
     private fun flushPainLogs() {

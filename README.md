@@ -70,7 +70,9 @@ Three pieces make this robust rather than just a nice screen flow:
   screen is up, nothing underneath it can be tapped (or reached by a screen
   reader), and a banner at the top always says what's locked, which step
   you're on, and what Back does at your current setting — so the rule is
-  never something you have to remember.
+  never something you have to remember. The screens scroll when they don't
+  fit (a short phone, a photo attached, a large font) and stay above the
+  on-screen keyboard.
 - **Configurable escape difficulty.** A FOCUS settings card lets you pick
   how hard it is to back out of a capture/action screen without finishing
   it — **EASY** (back exits immediately, for when this is just a reminder),
@@ -95,24 +97,39 @@ Three pieces make this robust rather than just a nice screen flow:
   instead of leaving a stale "confirm" button up, and a watch action taken
   while briefly disconnected is queued and retried rather than silently
   dropped. This works with the phone app closed too: a pain log is saved
-  immediately (with a quiet "tap to add details" notification), a finished
-  task closes its audit row and clears its reminders, and the watch's counts
-  are merged into the phone's — never overwriting something the phone did
-  itself, like a notification quick-reply.
+  immediately (with a quiet "tap to add details" notification), and a
+  finished task closes its audit row and clears its reminders. The watch's
+  counts are merged into the phone's — with the app open or closed — never
+  overwriting something the phone did itself, like a notification
+  quick-reply. Each push from the watch is stamped with its day, so one
+  still carrying yesterday's numbers is ignored, and the phone starts each
+  day's counts fresh by itself at midnight.
 
 ## Pain / symptom logging
 
-A separate flow (deck index 4 on the watch): log a 0–10 pain level with a
-free-text "location / type / triggers" description (camera capture is
-available here too). Logging above level 3 automatically schedules a
-60-minute follow-up check-in unless it falls inside your configured sleep
-window — which can itself be overridden with a "clinical override" setting
-for round-the-clock monitoring.
+A separate flow — on the watch (deck index 4) or the phone (the **LOG PAIN**
+button on the dashboard): log a 0–10 pain level with a free-text "location /
+type / triggers" description (camera capture is available here too). Logging
+above level 3 automatically schedules a 60-minute follow-up check-in unless
+it falls inside your configured sleep window — which can itself be overridden
+with a "clinical override" setting for round-the-clock monitoring.
 
-The level is saved the moment the phone receives it (0 = "resolved" counts
-too); the description screen afterwards is optional and only fills in the
-note. Backing out of it is always immediate, whatever the escape setting,
-and never loses the entry or touches a medication alert.
+On the phone, the level is chosen from a row of 0–10 buttons on one screen
+along with the optional description; nothing is saved until you press SAVE,
+and Back asks before discarding anything you chose or typed. The phone tells
+the watch about the entry, so the watch — which owns the follow-up schedule —
+schedules or cancels the check-in exactly as for its own logs, even when its
+app is closed.
+
+A pain log made on the watch is saved on the phone the moment it arrives
+(0 = "resolved" counts too); the description screen afterwards is optional
+and only fills in the note. Backing out of it is always immediate, whatever
+the escape setting, and never loses the entry or touches a medication alert.
+
+The follow-up check-in is its own item, not a medication alert: it arrives as
+an ordinary notification (tapping it opens the phone's pain screen), is
+graded separately as "PAIN CHECK-IN" in the compliance card, and closes when
+you log pain on either device.
 
 ## Compliance auditing + PDF export
 
@@ -135,11 +152,12 @@ COMPLIANCE card can list every task with a plain-language reason ("Done 1h
 10m after the first alert — past the 60m mark (5 alerts, 4 unanswered).").
 
 The audit is viewable in-app or exported as a multi-page PDF ("Behavioral
-Audit" or a separate light-mode "Clinical Report") — 24h/7d/30d alert volume
-and slippage-rate summaries, per-protocol average response latency, a
-worst-hour-for-abandoned-alerts callout, and a response-latency histogram —
-handed off to the OS share sheet. *Note: the PDF's figures are still counted
-per alert, not per task, so they won't match the in-app grade exactly.*
+Audit" or a separate light-mode "Clinical Report"), counted the same way — by
+task, in plain wording (on time / late / not done), over the whole date range
+you choose: 24h/7d/30d summaries (with the raw alert count alongside), a
+per-protocol table (tasks, % on time, average time to finish, grade), the hour
+of day with the most late or not-done tasks, and a time-to-finish histogram —
+handed off to the OS share sheet.
 
 ## Background behavior
 

@@ -103,12 +103,17 @@ fun VitalityOrchestrator(activity: MainActivity) {
         }
     }
 
+    // The pain picker sits on top of everything (it can be opened from the
+    // check-in notification mid-response), so its Back handler is declared last:
+    // the last enabled BackHandler wins.
+    BackHandler(enabled = activity.painPickerActive) { activity.requestClosePainPicker() }
+
     // The "lock": while an interrupt (or the nutrition log) is up, the whole
     // screen is taken over — touches can't reach the dashboard underneath,
     // screen readers can't wander into it either, and a banner keeps saying
     // what's locked, which step you're on, and exactly how to leave.
     val lockedProtocol = activity.activeProtocol?.takeIf { activity.appMode != AppMode.DASHBOARD }
-    val locked = lockedProtocol != null
+    val locked = lockedProtocol != null || activity.painPickerActive
 
     Box(Modifier.fillMaxSize().background(NeonBg)) {
         Box(Modifier.fillMaxSize().then(if (locked) Modifier.clearAndSetSemantics { } else Modifier)) {
@@ -126,6 +131,11 @@ fun VitalityOrchestrator(activity: MainActivity) {
                     .background(NeonBg.copy(alpha = 0.98f))
                     .blockTouches()
                     .systemBarsPadding()
+                    // Shrink the whole locked layer above the on-screen
+                    // keyboard so the text box and its buttons stay reachable
+                    // (the content area scrolls; the banner and, under FIRM,
+                    // the hold button stay put).
+                    .imePadding()
             ) {
                 LockStatusStrip(
                     title = when {
@@ -189,6 +199,10 @@ fun VitalityOrchestrator(activity: MainActivity) {
                     ) { activity.abandonInterruption() }
                 }
             }
+        }
+
+        if (activity.painPickerActive) {
+            PainPickerLayer(activity)
         }
 
         if (showAbandonConfirm) {
@@ -260,7 +274,13 @@ fun InterruptionOverlay(activity: MainActivity) {
             .padding(20.dp),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // Scrolls when the content is taller than the space left under the
+        // banner (short phone, photo attached, large font, keyboard open);
+        // when it fits, the Box still centers it exactly as before.
+        Column(
+            modifier = Modifier.verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
 
             // --- PHASE 1: CAPTURE INPUT ---
             if (activity.appMode == AppMode.INTERRUPT_CAPTURE) {
@@ -482,7 +502,14 @@ fun VitalityDashboard(activity: MainActivity, logs: List<SystemLog>, audits: Lis
         Spacer(Modifier.height(12.dp))
 
         // --- MODULES ---
-        DiagnosticModule(logs, audits, activity)
+        // The phone's own way to log pain (it used to be watch-only, with the
+        // phone just adding a description afterwards). Also where tapping the
+        // pain check-in notification lands.
+        CyberButtonBlock("LOG PAIN", NeonPink) { activity.openPainPicker() }
+
+        Spacer(Modifier.height(12.dp))
+
+        DiagnosticModule(logs, activity)
 
         Spacer(Modifier.height(12.dp))
 
@@ -724,7 +751,7 @@ private fun taskItemName(config: SysConfig, task: VitalityMath.GradedTask): Stri
 
 @Composable
 private fun TaskReasonRow(task: VitalityMath.GradedTask, config: SysConfig) {
-    val protocolLabel = Protocol.values().firstOrNull { it.name == task.protocolType }?.label ?: task.protocolType
+    val protocolLabel = protocolDisplayLabel(task.protocolType)
     val title = listOfNotNull(protocolLabel, taskItemName(config, task)).joinToString(" · ")
     val whenText = remember(task.firstIssued) {
         val pattern = if (VitalityMath.isSameDay(task.firstIssued, System.currentTimeMillis())) "'TODAY' HH:mm" else "EEE HH:mm"
@@ -855,7 +882,7 @@ fun ComplianceAuditModule(audits: List<NotificationAudit>, config: SysConfig) {
 
                     ConfigLabel("BY PROTOCOL")
                     byProtocol.forEach { (protoName, grade) ->
-                        val label = Protocol.values().firstOrNull { it.name == protoName }?.label ?: protoName
+                        val label = protocolDisplayLabel(protoName)
                         Row(
                             Modifier.fillMaxWidth().padding(vertical = 4.dp),
                             Arrangement.SpaceBetween, Alignment.CenterVertically
@@ -900,7 +927,7 @@ fun ComplianceAuditModule(audits: List<NotificationAudit>, config: SysConfig) {
 }
 
 @Composable
-fun DiagnosticModule(allLogs: List<SystemLog>, allAudits: List<NotificationAudit>, activity: MainActivity) {
+fun DiagnosticModule(allLogs: List<SystemLog>, activity: MainActivity) {
     var isRevealed by remember { mutableStateOf(false) }
     var weekOffset by remember { mutableIntStateOf(0) }
     var isClinicalExport by remember { mutableStateOf(false) }
@@ -1022,20 +1049,28 @@ fun DiagnosticModule(allLogs: List<SystemLog>, allAudits: List<NotificationAudit
                         it.type == "PAIN" && it.timestamp >= activity.rangeStart && it.timestamp <= activity.rangeEnd
                     }.sortedBy { it.timestamp }
 
-                    val exportAudits = allAudits.filter {
-                        it.timestampIssued >= activity.rangeStart && it.timestampIssued <= activity.rangeEnd
-                    }
-
-                    val pdfUri = PdfGenerator.generateReport(context, exportLogs, exportAudits, isClinicalExport)
-
-                    if (pdfUri != null) {
-                        val sendIntent = Intent().apply {
-                            action = Intent.ACTION_SEND
-                            putExtra(Intent.EXTRA_STREAM, pdfUri)
-                            type = "application/pdf"
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    val rangeStart = activity.rangeStart
+                    val rangeEnd = activity.rangeEnd
+                    val clinical = isClinicalExport
+                    activity.lifecycleScope.launch {
+                        // Load everything in the chosen range (the in-app card
+                        // only sees the latest 100 rows, so building the report
+                        // from that could silently omit older alerts), and
+                        // build the document off the main thread.
+                        val pdfUri = withContext(Dispatchers.IO) {
+                            val exportAudits = activity.db.systemDao().getAuditsInRange(rangeStart, rangeEnd)
+                            PdfGenerator.generateReport(context, exportLogs, exportAudits, clinical)
                         }
-                        context.startActivity(Intent.createChooser(sendIntent, "Share Vitality Report"))
+
+                        if (pdfUri != null) {
+                            val sendIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_STREAM, pdfUri)
+                                type = "application/pdf"
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, "Share Vitality Report"))
+                        }
                     }
                 }
             }

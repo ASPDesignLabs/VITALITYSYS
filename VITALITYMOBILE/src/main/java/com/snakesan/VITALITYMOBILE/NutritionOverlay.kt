@@ -3,6 +3,8 @@ package com.snakesan.vitalitysys
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,9 +31,11 @@ fun NutritionOverlay(onLogMeal: (cal: Float, fat: Float, pro: Float, fiber: Floa
             .padding(20.dp),
         contentAlignment = Alignment.Center
     ) {
+        // Five sliders plus a button is tall; scroll rather than clip when
+        // the banner above and a small screen leave less room than that.
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
         ) {
             Text(
                 "MACRONUTRIENT INGESTION SCAN",

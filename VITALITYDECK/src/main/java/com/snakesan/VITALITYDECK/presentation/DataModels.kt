@@ -2,6 +2,13 @@ package com.snakesan.vitalitysys
 
 import java.nio.ByteBuffer
 
+// The id the pain follow-up check-in travels under. The same pseudo-id the
+// phone already uses for pain events — deliberately NOT a Protocol: the
+// watch's deck indexing is built on Protocol.values() (pain is deck 4), and
+// the check-in used to masquerade as CHEMISTRY, which put a fake medication
+// alert on the phone and left it graded as a missed dose.
+const val PAIN_PROTOCOL_ID = 99
+
 // itemKey identifies which specific dose/hygiene task this event is about
 // (see SysConfig.doseKey / hygieneKey). Empty for NUTRIENT/HYDRATION, which
 // have no sub-items.

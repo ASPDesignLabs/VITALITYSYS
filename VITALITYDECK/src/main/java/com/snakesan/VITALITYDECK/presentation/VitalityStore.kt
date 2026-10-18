@@ -8,7 +8,9 @@ import java.util.Calendar
 class VitalityStore(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("vitality_db", Context.MODE_PRIVATE)
 
-    fun checkDailyReset() {
+    // Returns true if it rolled the stored counts over to a new day, so a
+    // caller holding its own in-memory copy knows to reload it.
+    fun checkDailyReset(): Boolean {
         // year*1000 + dayOfYear (matches the phone's getTodayId()) — plain
         // DAY_OF_YEAR alone would wrongly skip a reset if the watch went
         // untouched for close to exactly 365/366 days.
@@ -22,8 +24,15 @@ class VitalityStore(context: Context) {
                 .putInt("count_hydration", 0)
                 .putString("completed_keys", "")
                 .apply()
+            return true
         }
+        return false
     }
+
+    // The day (same year*1000 + dayOfYear id) the stored counts belong to.
+    // Stamped on every state push so the phone can tell — and ignore — a
+    // push that is still carrying a previous day's numbers.
+    fun dayId(): Int = prefs.getInt("day_id", -1)
 
     var nutrientCount: Int
         get() = prefs.getInt("count_nutrient", 0)
@@ -45,6 +54,14 @@ class VitalityStore(context: Context) {
     var lastPainLevel: Int
         get() = prefs.getInt("last_pain_lvl", 0)
         set(value) = prefs.edit().putInt("last_pain_lvl", value).apply()
+
+    // Timestamp of the newest pain log the PHONE told us about. The phone's
+    // sync item is persistent and can be redelivered (a reconnect, a service
+    // restart), so this keeps the same entry from re-running the follow-up
+    // rule (which would push the 60-minute check-in back each time).
+    var lastPhonePainTs: Long
+        get() = prefs.getLong("last_phone_pain_ts", 0L)
+        set(value) = prefs.edit().putLong("last_phone_pain_ts", value).apply()
 
     fun setLastTime(protocol: Protocol, time: Long) = prefs.edit().putLong("last_time_${protocol.id}", time).apply()
     fun getLastTime(protocol: Protocol): Long = prefs.getLong("last_time_${protocol.id}", 0L)

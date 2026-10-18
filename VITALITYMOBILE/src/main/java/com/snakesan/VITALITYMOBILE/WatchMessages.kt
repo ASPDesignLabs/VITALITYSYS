@@ -16,6 +16,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
+// One day's counts and completed dose/task keys. The single rule for folding
+// the watch's numbers into the phone's lives here, so the background path
+// (mergeWatchState) and the live handler in MainActivity can't drift apart:
+// within a day counts only go up and keys are only added, so the larger count
+// and the union of keys keeps both sides' completions.
+data class DayCounts(val nutrients: Int, val hydration: Int, val keys: Set<String>) {
+    fun mergedWith(other: DayCounts) = DayCounts(
+        nutrients = maxOf(nutrients, other.nutrients),
+        hydration = maxOf(hydration, other.hydration),
+        keys = keys + other.keys
+    )
+}
+
 // What the phone does with messages from the watch when MainActivity ISN'T
 // running. While it is, MainActivity's own live listeners handle these
 // (see MainActivity.onMessageReceived / onDataChanged) and
@@ -47,6 +60,8 @@ object WatchMessages {
         val app = context.applicationContext
         CoroutineScope(Dispatchers.IO).launch {
             VitalityDatabase.getDatabase(app).systemDao().savePainLog(event.level, event.loggedAt)
+            // Logging pain answers a pending follow-up check-in, if there is one.
+            MainActivity.markPainCheckDone(app, "WATCH_LOGGED")
             val intent = launchIntent(app).apply {
                 putExtra("PROTOCOL_ID", 99)
                 putExtra("PAIN_LEVEL", event.level)
@@ -117,14 +132,17 @@ object WatchMessages {
     // dose/task keys (MainActivity.onDataChanged applies it live). Without the
     // app running, nothing wrote it to the database, so the phone — and
     // HeartbeatWorker's HP maths — kept using stale numbers.
-    fun applyStateWhenClosed(context: Context, nutrients: Int, hydration: Int, completedKeys: String) {
+    fun applyStateWhenClosed(
+        context: Context, nutrients: Int, hydration: Int, completedKeys: String, watchDayId: Int?
+    ) {
         if (MainActivity.isRunning()) return
         val app = context.applicationContext
         CoroutineScope(Dispatchers.IO).launch {
             val dao = VitalityDatabase.getDatabase(app).systemDao()
             val dayId = todayId()
             val merged = mergeWatchState(
-                dao.getDailyStats(dayId), dayId, nutrients, hydration, completedKeys, System.currentTimeMillis()
+                dao.getDailyStats(dayId), dayId, nutrients, hydration, completedKeys,
+                System.currentTimeMillis(), watchDayId
             ) ?: return@launch
             dao.setDailyStats(merged)
         }
@@ -140,30 +158,38 @@ object WatchMessages {
     // larger count and the union of keys keeps both sides' completions, and is
     // safe to repeat. Returns null when nothing would change, because the
     // watch re-pushes every minute while its app is on screen.
+    //
+    // watchDayId is the day the watch stamped on its push. Merging can only
+    // ever raise a number, so a push still carrying YESTERDAY's counts (the
+    // watch used to reset only on open and in a 15-minute worker, so an app
+    // left on screen across midnight kept pushing them) would stick for the
+    // whole day if it were merged — it is ignored instead. null = an older
+    // watch build that doesn't stamp its pushes: merged as before.
     internal fun mergeWatchState(
         existing: DailyStats?,
         dayId: Int,
         nutrients: Int,
         hydration: Int,
         completedKeys: String,
-        now: Long
+        now: Long,
+        watchDayId: Int? = null
     ): DailyStats? {
-        val mergedNutrients = maxOf(existing?.nutrientCount ?: 0, nutrients)
-        val mergedHydration = maxOf(existing?.hydrationCount ?: 0, hydration)
-        val existingKeys = existing?.let { decodeKeySet(it.completedKeys) } ?: emptySet()
-        val mergedKeys = existingKeys + decodeKeySet(completedKeys)
+        if (watchDayId != null && watchDayId != dayId) return null
 
-        if (existing != null &&
-            existing.nutrientCount == mergedNutrients &&
-            existing.hydrationCount == mergedHydration &&
-            existingKeys == mergedKeys
-        ) return null
+        val current = DayCounts(
+            nutrients = existing?.nutrientCount ?: 0,
+            hydration = existing?.hydrationCount ?: 0,
+            keys = existing?.let { decodeKeySet(it.completedKeys) } ?: emptySet()
+        )
+        val merged = current.mergedWith(DayCounts(nutrients, hydration, decodeKeySet(completedKeys)))
+
+        if (existing != null && merged == current) return null
 
         return DailyStats(
             dayId = dayId,
-            nutrientCount = mergedNutrients,
-            hydrationCount = mergedHydration,
-            completedKeys = encodeKeySet(mergedKeys),
+            nutrientCount = merged.nutrients,
+            hydrationCount = merged.hydration,
+            completedKeys = encodeKeySet(merged.keys),
             lastUpdated = now
         )
     }

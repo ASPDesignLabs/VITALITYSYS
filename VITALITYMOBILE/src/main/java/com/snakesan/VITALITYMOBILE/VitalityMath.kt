@@ -168,6 +168,9 @@ object VitalityMath {
         val firstIssued: Long,
         val alertCount: Int,
         val outcome: TaskOutcome,
+        // Whole minutes from the first alert to completion; null if never done.
+        // (Note a MISSED task can still have one: finished only after midnight.)
+        val finishedAfterMins: Long?,
         val reason: String // plain-language explanation shown in the app
     )
 
@@ -261,6 +264,7 @@ object VitalityMath {
             firstIssued = firstIssued,
             alertCount = chain.size,
             outcome = outcome,
+            finishedAfterMins = finishedAfterMillis?.div(60_000L),
             reason = if (notes.isEmpty()) headline else "${headline.trimEnd('.')} (${notes.joinToString(", ")})."
         )
     }

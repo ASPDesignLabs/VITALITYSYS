@@ -40,6 +40,23 @@ class VitalityDataService : WearableListenerService() {
                         "Background Relay to HUD: HP:$hp OC:$overcharge"
                     )
                 }
+
+                // When pain is logged on the Phone, it tells the watch (as a
+                // persistent sync item, so it survives a brief disconnect) so
+                // the watch — which owns the 60-minute follow-up schedule — can
+                // schedule or cancel it exactly as for a log made here. Handled
+                // in this background service because the watch app is usually
+                // closed when the phone is in use.
+                if (path == "/vitality_pain_from_phone") {
+                    val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
+                    val level = dataMap.getInt("level", -1)
+                    val loggedAt = dataMap.getLong("ts", 0L)
+                    val store = VitalityStore(this)
+                    if (level in 0..10 && loggedAt > store.lastPhonePainTs) {
+                        store.lastPhonePainTs = loggedAt
+                        PainFollowUp.apply(this, level)
+                    }
+                }
             }
         }
     }

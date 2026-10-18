@@ -88,6 +88,21 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     // only ever updates this row's note — escaping it can't lose the entry.
     private var pendingPainLogId: Deferred<Long>? = null
 
+    // The phone's own pain picker: a user-initiated pain log (dashboard button,
+    // or tapping the pain check-in notification). Unlike a pain event that
+    // arrives from the watch — already saved by the time its screen shows —
+    // nothing here is saved until SAVE, so Back asks before discarding
+    // anything chosen or typed (see requestClosePainPicker).
+    var painPickerActive by mutableStateOf(false)
+    var painPickerLevel by mutableStateOf<Int?>(null)
+    var painPickerNote by mutableStateOf("")
+    var painPickerPhotoUri by mutableStateOf<Uri?>(null)
+    var painPickerConfirmDiscard by mutableStateOf(false)
+    // Which screen the photo currently being taken belongs to, so the picker's
+    // photo can never overwrite an interrupt's (the two can be open together
+    // if the check-in notification is tapped mid-response).
+    private var photoForPicker = false
+
     var rangeStart by mutableLongStateOf(System.currentTimeMillis() - 604800000L)
     var rangeEnd by mutableLongStateOf(System.currentTimeMillis())
 
@@ -133,13 +148,26 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     private val takePictureLauncher = registerForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success ->
-        userContextPhotoUri = if (success) photoCaptureTarget else null
+        val taken = if (success) photoCaptureTarget else null
+        if (photoForPicker) painPickerPhotoUri = taken else userContextPhotoUri = taken
         photoCaptureTarget = null
+        photoForPicker = false
     }
 
     // Entry point for the "ATTACH PHOTO" option in the interrupt-capture
     // screen — an alternative to typing what you were doing.
     fun capturePhoto() {
+        photoForPicker = false
+        startPhotoCapture()
+    }
+
+    // Same, for the pain picker's description.
+    fun capturePainPhoto() {
+        photoForPicker = true
+        startPhotoCapture()
+    }
+
+    private fun startPhotoCapture() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             != PackageManager.PERMISSION_GRANTED
         ) {
@@ -160,6 +188,29 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     private fun getTodayId(): Int {
         val c = Calendar.getInstance()
         return (c.get(Calendar.YEAR) * 1000) + c.get(Calendar.DAY_OF_YEAR)
+    }
+
+    // The day the in-memory counts and completed keys belong to. The phone has
+    // no daily reset of its own: it used to depend on the watch's push to zero
+    // things at midnight, and until that arrived persistState would write
+    // yesterday's counts into today's row. See rollOverDayIfNeeded.
+    private var loadedDayId = 0
+
+    // Starts a new day's counts from zero once midnight has passed. In memory
+    // only (no database read): while the app is open, the only writers of
+    // today's row are this Activity and a notification quick-reply, and the
+    // row is empty at the instant of rollover. Overcharge is deliberately left
+    // alone — it follows HP, and a new day's counts pull HP down by themselves.
+    // Runs on the 5-second tick and before a watch push is merged, since the
+    // tick doesn't run while the app is stopped.
+    private fun rollOverDayIfNeeded() {
+        val today = getTodayId()
+        if (today == loadedDayId) return
+        loadedDayId = today
+        nutrientCount = 0
+        hydrationCount = 0
+        completedKeys = emptySet()
+        calculateHealth(Calendar.getInstance())
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -194,9 +245,11 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         db = VitalityDatabase.getDatabase(this)
 
         // --- LOAD STATE FROM DB ---
+        loadedDayId = getTodayId()
+        val loadDayId = loadedDayId
         lifecycleScope.launch {
             val stats = withContext(Dispatchers.IO) {
-                db.systemDao().getDailyStats(getTodayId())
+                db.systemDao().getDailyStats(loadDayId)
             }
             if (stats != null) {
                 nutrientCount = stats.nutrientCount
@@ -238,6 +291,7 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             // repeatOnLifecycle suspends when the app is minimized and resumes when opened
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (isActive) {
+                    rollOverDayIfNeeded()
                     calculateHealth(Calendar.getInstance())
                     // 5-second tick for incredibly responsive UI without draining background battery
                     delay(5000)
@@ -300,7 +354,10 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     }
 
     fun persistState() {
-        val dayId = getTodayId()
+        // The day the counts were loaded for, not the wall clock's: in the gap
+        // between midnight and rollover the in-memory counts are still
+        // yesterday's, and they must not be written into today's row.
+        val dayId = loadedDayId
         val stats = DailyStats(
             dayId = dayId,
             nutrientCount = nutrientCount,
@@ -400,10 +457,32 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             if (event.type == DataEvent.TYPE_CHANGED) {
                 if (event.dataItem.uri.path == "/vitality_state") {
                     val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
+                    // Read before the buffer is released. A missing field
+                    // counts as "nothing new" (0 / no keys), which a merge ignores.
+                    val watchDayId = if (dataMap.containsKey("dayId")) dataMap.getInt("dayId") else null
+                    val incoming = DayCounts(
+                        nutrients = dataMap.getInt("nutrients", 0),
+                        hydration = dataMap.getInt("hydration", 0),
+                        keys = decodeKeySet(dataMap.getString("completedKeys") ?: "")
+                    )
                     runOnUiThread {
-                        nutrientCount = dataMap.getInt("nutrients", nutrientCount)
-                        hydrationCount = dataMap.getInt("hydration", hydrationCount)
-                        completedKeys = decodeKeySet(dataMap.getString("completedKeys") ?: "")
+                        // The first push after midnight can arrive before the
+                        // 5-second tick (or while the app is stopped, when
+                        // there is no tick): roll over first, so it is judged
+                        // against — and merged into — today.
+                        rollOverDayIfNeeded()
+                        // A push stamped with another day is stale, and a merge
+                        // can only raise numbers, so merging it would stick
+                        // for the whole day (see WatchMessages.mergeWatchState).
+                        if (watchDayId != null && watchDayId != loadedDayId) return@runOnUiThread
+
+                        // Merge, don't overwrite: the phone can have completions
+                        // the watch hasn't seen, and the watch's push can be
+                        // older than them.
+                        val merged = DayCounts(nutrientCount, hydrationCount, completedKeys).mergedWith(incoming)
+                        nutrientCount = merged.nutrients
+                        hydrationCount = merged.hydration
+                        completedKeys = merged.keys
 
                         calculateHealth(Calendar.getInstance())
                         persistState()
@@ -414,6 +493,13 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
     }
 
     private fun handleIntent(intent: Intent) {
+        // Tapped the pain check-in notification: open the pain picker. The
+        // extra is cleared so a re-created Activity re-reading this same
+        // intent (a rotation, say) doesn't open it a second time.
+        if (intent.getBooleanExtra("OPEN_PAIN_PICKER", false)) {
+            intent.removeExtra("OPEN_PAIN_PICKER")
+            openPainPicker()
+        }
         if (intent.hasExtra("PROTOCOL_ID")) {
             val protoId = intent.getIntExtra("PROTOCOL_ID", -1)
             completedViaWatch = false
@@ -652,6 +738,19 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
         // Activity's (app running), so each message is handled once.
         fun isRunning(): Boolean = activeInstance != null
 
+        // Closes out the pain follow-up check-in once pain has been logged —
+        // on the watch or the phone. Clears its notification and fulfills the
+        // newest same-day PAIN_CHECK audit row (the same first-signal-wins,
+        // same-day rules as every other completion). A no-op if no check-in is
+        // pending, so logging pain unprompted changes nothing.
+        fun markPainCheckDone(context: Context, interactionType: String) {
+            NotificationManagerCompat.from(context).cancel(PAIN_PROTOCOL_ID)
+            val db = VitalityDatabase.getDatabase(context)
+            CoroutineScope(Dispatchers.IO).launch {
+                applyAuditFulfillment(db, PAIN_PROTOCOL_ID, "", interactionType)
+            }
+        }
+
         fun isActivelyRespondingTo(protocolId: Int): Boolean {
             val instance = activeInstance ?: return false
             // Same carve-out as reconcileInFlightOverlay: a pain capture
@@ -738,6 +837,65 @@ class MainActivity : ComponentActivity(), MessageClient.OnMessageReceivedListene
             }
             closePainEvent()
         }
+    }
+
+    // ---- Phone pain picker ----
+
+    fun openPainPicker() {
+        if (painPickerActive) return // already open (e.g. a second notification tap)
+        painPickerLevel = null
+        painPickerNote = ""
+        painPickerPhotoUri = null
+        painPickerConfirmDiscard = false
+        painPickerActive = true
+    }
+
+    // Back / CANCEL. With nothing chosen or typed there is nothing to lose, so
+    // it just leaves; otherwise it asks first — an accidental Back must not
+    // silently throw an entry away, and (unlike a watch-logged event, which is
+    // already saved) nothing here has been saved yet.
+    fun requestClosePainPicker() {
+        val dirty = painPickerLevel != null || painPickerNote.isNotBlank() || painPickerPhotoUri != null
+        if (dirty) painPickerConfirmDiscard = true else closePainPicker()
+    }
+
+    fun closePainPicker() {
+        painPickerActive = false
+        painPickerLevel = null
+        painPickerNote = ""
+        painPickerPhotoUri = null
+        painPickerConfirmDiscard = false
+    }
+
+    // SAVE: writes the entry once, closes a pending check-in, and tells the
+    // watch (which owns the 60-minute follow-up schedule). Written on an
+    // app-scoped coroutine so it still finishes if the Activity goes away.
+    fun savePainFromPhone() {
+        val level = painPickerLevel ?: return
+        val loggedAt = System.currentTimeMillis()
+        val note = painPickerNote.trim().ifEmpty { "No details provided" } +
+            if (painPickerPhotoUri != null) " [+photo]" else ""
+        val app = applicationContext
+
+        CoroutineScope(Dispatchers.IO).launch {
+            val dao = VitalityDatabase.getDatabase(app).systemDao()
+            val id = dao.savePainLog(level, loggedAt)
+            dao.updateLogNote(id, note)
+        }
+        markPainCheckDone(app, "CLICKED")
+        sendPainToWatch(level, loggedAt)
+        closePainPicker()
+    }
+
+    // A persistent sync item rather than a message: it is delivered when the
+    // watch reconnects if it's out of range now. Same path overwrites, so only
+    // the newest entry is kept, which is all the follow-up rule needs.
+    private fun sendPainToWatch(level: Int, loggedAt: Long) {
+        val request = PutDataMapRequest.create("/vitality_pain_from_phone").apply {
+            dataMap.putInt("level", level)
+            dataMap.putLong("ts", loggedAt)
+        }.asPutDataRequest().setUrgent()
+        Wearable.getDataClient(this).putDataItem(request)
     }
 
     // Ends the pain screen without touching any audit or notification state.

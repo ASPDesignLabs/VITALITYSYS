@@ -48,6 +48,12 @@
                 <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
                 <data android:scheme="wear" android:host="*" android:pathPrefix="/vitality_status" />
             </intent-filter>
+            <!-- Pain logged on the phone: the watch owns the follow-up schedule,
+                 so it has to hear about it even when its app is closed. -->
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data android:scheme="wear" android:host="*" android:path="/vitality_pain_from_phone" />
+            </intent-filter>
         </service>
 
     </application>
